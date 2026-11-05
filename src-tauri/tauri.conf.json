@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Quietly",
-  "version": "1.4.0",
+  "version": "0.1.0",
   "identifier": "ru.quietly.messenger",
   "build": {
     "frontendDist": "../dist",
