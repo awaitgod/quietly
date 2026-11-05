@@ -1,0 +1,352 @@
+import { defineStore } from 'pinia';
+import { ref } from 'vue';
+import { supabase, authApi, rpcApi, tablesApi, externalApi } from '../services/supabase';
+import type { UserProfile, UserDevice } from '../types';
+export function friendlyAuthError(e: any): string {
+    const t = e?.message || '';
+    const n = t.match(/after (\d+) seconds?/i);
+    if (n)
+        return `Подождите ${n[1]} сек. перед повторной отправкой кода.`;
+    if (/security purposes/i.test(t))
+        return 'Подождите минуту перед повторной отправкой кода.';
+    if (/rate limit|too many/i.test(t))
+        return 'Слишком много попыток. Подождите пару минут и попробуйте снова.';
+    if (/failed to fetch|network|load failed/i.test(t))
+        return 'Нет соединения с сервером. Проверьте интернет и попробуйте снова.';
+    if (/banned/i.test(t))
+        return 'Аккаунт заблокирован или удален.';
+    if (/invalid/i.test(t) && /email/i.test(t))
+        return 'Проверьте введённый email.';
+    if (/invalid login credentials|invalid credentials/i.test(t))
+        return 'Неверный пароль.';
+    return t || 'Произошла ошибка при отправке запроса.';
+}
+export function getOrCreateDeviceId(): string {
+    let devId = localStorage.getItem('quietly_device_id');
+    if (!devId) {
+        devId = 'dev_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        localStorage.setItem('quietly_device_id', devId);
+    }
+    return devId;
+}
+export const useAuthStore = defineStore('auth', () => {
+    const user = ref<any>(null);
+    const profile = ref<UserProfile | null>(null);
+    const isAdminUser = ref(false);
+    const activeDevices = ref<UserDevice[]>([]);
+    const isLoading = ref(true);
+    const authScreen = ref<'boot' | 'email' | 'otp' | 'profile_setup' | 'password_set' | 'password_login' | 'forgot' | 'logged_in'>('boot');
+    const emailDraft = ref('');
+    const isExisting = ref(false);
+    const otpDraft = ref('');
+    const otpCountdown = ref(0);
+    let timer: any = null;
+    let heartbeatTimer: any = null;
+    async function initAuth() {
+        isLoading.value = true;
+        try {
+            const { data: { session } } = await authApi.getSession();
+            if (session?.user) {
+                user.value = session.user;
+                await loadProfile(session.user.id);
+                await syncDeviceSession(session);
+                await checkAdminRole();
+                if (profile.value?.username) {
+                    authScreen.value = 'logged_in';
+                }
+                else {
+                    authScreen.value = 'profile_setup';
+                }
+                startHeartbeat();
+            }
+            else {
+                authScreen.value = 'email';
+            }
+        }
+        catch (err) {
+            console.error('[Auth] Init error:', err);
+            authScreen.value = 'email';
+        }
+        finally {
+            isLoading.value = false;
+        }
+        supabase.auth.onAuthStateChange(async (event, session) => {
+            if (session?.user) {
+                user.value = session.user;
+                await loadProfile(session.user.id);
+                await syncDeviceSession(session);
+                await checkAdminRole();
+            }
+            else if (event === 'SIGNED_OUT') {
+                user.value = null;
+                profile.value = null;
+                isAdminUser.value = false;
+                stopHeartbeat();
+                authScreen.value = 'email';
+            }
+        });
+    }
+    async function loadProfile(userId: string) {
+        try {
+            const { data, error } = await tablesApi.profiles.getById(userId);
+            if (error)
+                throw error;
+            if (data) {
+                profile.value = data as UserProfile;
+            }
+        }
+        catch (err) {
+            console.error('[Auth] loadProfile error:', err);
+        }
+    }
+    async function syncDeviceSession(session?: any) {
+        if (!user.value?.id)
+            return;
+        const myId = user.value.id;
+        const devId = getOrCreateDeviceId();
+        try {
+            const { data: revokedCheck } = await tablesApi.userDevices.checkRevoked(myId, devId);
+            if (revokedCheck?.revoked_at) {
+                await logout();
+                alert('Ваш сеанс был завершён на другом устройстве.');
+                return;
+            }
+            const ip = await externalApi.fetchExternalIp();
+            await tablesApi.userDevices.upsertDevice({
+                user_id: myId,
+                device_id: devId,
+                name: 'Quietly Desktop (Windows)',
+                kind: 'Компьютер',
+                ua: navigator.userAgent || 'Quietly Desktop Windows 11',
+                ip,
+                session_id: session?.access_token?.slice(0, 36) || null,
+                last_seen: new Date().toISOString(),
+            });
+        }
+        catch (err) {
+            console.warn('[Auth] syncDeviceSession error:', err);
+        }
+    }
+    function startHeartbeat() {
+        stopHeartbeat();
+        heartbeatTimer = setInterval(async () => {
+            if (!user.value?.id)
+                return;
+            const myId = user.value.id;
+            const now = new Date().toISOString();
+            try {
+                await tablesApi.profiles.updateLastSeen(myId, now);
+                await tablesApi.userDevices.updateLastSeen(myId, getOrCreateDeviceId(), now);
+            }
+            catch (e) {
+            }
+        }, 60000);
+    }
+    function stopHeartbeat() {
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+        }
+    }
+    async function checkAdminRole(): Promise<boolean> {
+        try {
+            const adm = await rpcApi.isAdmin();
+            isAdminUser.value = adm;
+            return adm;
+        }
+        catch {
+            isAdminUser.value = false;
+            return false;
+        }
+    }
+    async function setMyBadge(badge: string) {
+        await rpcApi.setMyBadge(badge);
+        if (profile.value) {
+            profile.value.badge = badge as any;
+        }
+    }
+    async function setOnlineVisibility(visibility: 'all' | 'contacts' | 'nobody') {
+        if (!user.value?.id)
+            return;
+        await tablesApi.profiles.updateOnlineVisibility(user.value.id, visibility);
+        if (profile.value) {
+            profile.value.online_visibility = visibility;
+        }
+    }
+    async function loadDevices() {
+        if (!user.value?.id)
+            return;
+        try {
+            const { data, error } = await tablesApi.userDevices.loadAllActive(user.value.id);
+            if (error)
+                throw error;
+            activeDevices.value = (data as UserDevice[]) || [];
+        }
+        catch (err) {
+            console.error('[Auth] loadDevices error:', err);
+        }
+    }
+    async function revokeDevice(deviceId: string) {
+        try {
+            await rpcApi.revokeDeviceSession(deviceId);
+            await loadDevices();
+        }
+        catch (err) {
+            console.error('[Auth] revokeDevice error:', err);
+        }
+    }
+    async function terminateOtherSessions() {
+        if (!user.value?.id)
+            return;
+        const devId = getOrCreateDeviceId();
+        try {
+            await tablesApi.userDevices.terminateOthers(user.value.id, devId);
+            await loadDevices();
+        }
+        catch (err) {
+            console.error('[Auth] terminateOtherSessions error:', err);
+        }
+    }
+    function startOtpTimer(seconds = 60) {
+        otpCountdown.value = seconds;
+        clearInterval(timer);
+        timer = setInterval(() => {
+            if (otpCountdown.value > 0) {
+                otpCountdown.value--;
+            }
+            else {
+                clearInterval(timer);
+            }
+        }, 1000);
+    }
+    async function checkEmailExists(email: string): Promise<boolean> {
+        try {
+            const exists = await rpcApi.emailExists(email);
+            isExisting.value = exists;
+            return exists;
+        }
+        catch {
+            return false;
+        }
+    }
+    async function sendOtp(email: string) {
+        emailDraft.value = email.trim().toLowerCase();
+        const { error } = await authApi.signInWithOtp(emailDraft.value, true);
+        if (error)
+            throw error;
+        startOtpTimer();
+        authScreen.value = 'otp';
+    }
+    async function verifyOtp(token: string) {
+        const { data, error } = await authApi.verifyOtp(emailDraft.value, token);
+        if (error)
+            throw error;
+        if (data.user) {
+            user.value = data.user;
+            await loadProfile(data.user.id);
+            if (isExisting.value || profile.value?.username) {
+                authScreen.value = 'password_login';
+            }
+            else {
+                authScreen.value = 'profile_setup';
+            }
+        }
+    }
+    async function loginWithPassword(password: string) {
+        const { data, error } = await authApi.signInWithPassword(emailDraft.value, password);
+        if (error)
+            throw error;
+        if (data.user) {
+            user.value = data.user;
+            await loadProfile(data.user.id);
+            authScreen.value = 'logged_in';
+        }
+    }
+    async function saveProfileSetup(name: string, username: string, avatarBlob?: Blob) {
+        if (!user.value?.id)
+            throw new Error('No user session');
+        let avatarUrl: string | null = null;
+        if (avatarBlob) {
+            const path = `${user.value.id}/avatar_${Date.now()}.jpg`;
+            const { error: upErr } = await supabase.storage.from('avatars').upload(path, avatarBlob, {
+                upsert: true,
+                contentType: 'image/jpeg',
+            });
+            if (!upErr) {
+                avatarUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+            }
+        }
+        const profileData: any = {
+            id: user.value.id,
+            name,
+            username: username.toLowerCase(),
+        };
+        if (avatarUrl) {
+            profileData.avatar_url = avatarUrl;
+        }
+        const { error } = await tablesApi.profiles.upsertProfile(profileData);
+        if (error)
+            throw error;
+        await loadProfile(user.value.id);
+        authScreen.value = 'password_set';
+    }
+    async function setInitialPassword(password: string) {
+        const { error } = await authApi.updatePassword(password);
+        if (error)
+            throw error;
+        authScreen.value = 'logged_in';
+    }
+    async function deleteIncompleteAccount() {
+        await rpcApi.deleteIncompleteAccount();
+        await logout();
+    }
+    async function deleteMyAccount() {
+        await rpcApi.deleteMyAccount();
+        await logout();
+    }
+    async function logout() {
+        clearInterval(timer);
+        stopHeartbeat();
+        if (user.value?.id) {
+            try {
+                await tablesApi.userDevices.deleteCurrent(user.value.id, getOrCreateDeviceId());
+            }
+            catch (e) {
+            }
+        }
+        await authApi.signOut({ scope: 'local' });
+        user.value = null;
+        profile.value = null;
+        isAdminUser.value = false;
+        authScreen.value = 'email';
+    }
+    return {
+        user,
+        profile,
+        isAdminUser,
+        activeDevices,
+        isLoading,
+        authScreen,
+        emailDraft,
+        isExisting,
+        otpDraft,
+        otpCountdown,
+        initAuth,
+        loadProfile,
+        checkEmailExists,
+        sendOtp,
+        verifyOtp,
+        loginWithPassword,
+        saveProfileSetup,
+        setInitialPassword,
+        setMyBadge,
+        setOnlineVisibility,
+        loadDevices,
+        revokeDevice,
+        terminateOtherSessions,
+        deleteIncompleteAccount,
+        deleteMyAccount,
+        logout,
+        startOtpTimer,
+    };
+});

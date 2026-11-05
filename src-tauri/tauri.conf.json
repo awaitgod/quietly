@@ -1,0 +1,57 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Quietly",
+  "version": "1.4.0",
+  "identifier": "ru.quietly.messenger",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Quietly",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 380,
+        "minHeight": 520,
+        "resizable": true,
+        "fullscreen": false,
+        "transparent": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "Мессенджер Quietly",
+    "longDescription": "Quietly — мессенджер для общения и обмена сообщениями.",
+    "publisher": "Quietly",
+    "windows": {
+      "nsis": {
+        "languages": [
+          "Russian"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp",
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

@@ -1,0 +1,117 @@
+/* Quietly light palette: soft canvas, distinct surfaces and readable controls. */
+html[data-theme="light"] {
+  --bg: #f1f2f6;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --text: #20222a;
+  --muted: #666d7b;
+  --link: #385fba;
+  --light-control: #e8eaf0;
+  --light-hover: #dfe2ea;
+  --light-selected: #e5e8f4;
+}
+
+/* The legacy desktop rules use IDs, so match their specificity here. */
+html[data-theme="light"] body #paneDm .chat-list {
+  background: #fff;
+  scrollbar-color: #c1c5d0 transparent;
+}
+html[data-theme="light"] body #paneDm .chat-item { color: var(--text); }
+html[data-theme="light"] body #paneDm .chat-item:hover { background: #f2f3f7; }
+html[data-theme="light"] body #paneDm .chat-item.active { background: var(--light-selected); }
+html[data-theme="light"] body #paneDm :is(.pane-heading, .chat-item-name, .chat-item.unread .chat-item-preview) { color: var(--text); }
+html[data-theme="light"] body :is(.dm-hamburger-btn, .header-round-btn, .settings-pane .back-circle) {
+  background: var(--light-control);
+  color: var(--text);
+}
+html[data-theme="light"] body :is(.dm-hamburger-btn, .header-round-btn, .settings-pane .back-circle):hover { background: var(--light-hover); }
+html[data-theme="light"] body .dm-hamburger-btn svg,
+html[data-theme="light"] body .settings-pane .back-circle svg { color: var(--text) !important; }
+html[data-theme="light"] body .chat-view .chat-top-name { color: var(--text); }
+html[data-theme="light"] body .chat-view .chat-top-status { color: var(--muted); }
+html[data-theme="light"] body .chat-view .chat-top-status.typing { color: #3265b7; }
+html[data-theme="light"] body .chat-top-avatar:not(.is-fav):not(:has(.grp-box)) { background: var(--light-control); color: var(--text); }
+
+/* Floating menu retains the dark theme's shape with a lighter, softer shadow. */
+html[data-theme="light"] body .dsk-menu {
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 14px 38px rgba(33, 38, 53, .15), 0 3px 10px rgba(33, 38, 53, .06);
+}
+html[data-theme="light"] body .dsk-item { color: var(--text); }
+html[data-theme="light"] body .dsk-item :is(svg, .solar-icon) { color: #717a8a; }
+html[data-theme="light"] body .dsk-item:hover { background: #f0f1f5; }
+html[data-theme="light"] body .dsk-item.on { background: var(--light-selected); }
+html[data-theme="light"] body .dsk-item.on :is(svg, .solar-icon) { color: #4f5c86; }
+html[data-theme="light"] body .dsk-sep { background: #e8e9ee; }
+
+/* Messages and composer have separate, softly contrasting surfaces. */
+html[data-theme="light"] body .composer-surface { background: #fff; box-shadow: 0 3px 14px rgba(39, 45, 61, .07); }
+html[data-theme="light"] body #loggedInScreen .composer-surface .chat-input-row { background: transparent; }
+html[data-theme="light"] body .chat-emoji-btn { color: #747b89; }
+html[data-theme="light"] body .chat-emoji-btn:hover,
+html[data-theme="light"] body .chat-emoji-btn.on { color: var(--text); }
+html[data-theme="light"] body .chat-send-btn { background: var(--light-control); color: #818896; }
+html[data-theme="light"] body .chat-send-btn.active { background: #616b94; color: #fff; }
+html[data-theme="light"] body .chat-send-btn.active:hover { background: #515c85; }
+html[data-theme="light"] body .chat-bubble-row.mine .chat-bubble:not(.sticker-bubble) { background: #e2e6f4; color: #20222a; box-shadow: 0 1px 3px rgba(33, 38, 53, .07); }
+html[data-theme="light"] body .chat-bubble-row:not(.mine) .chat-bubble:not(.sticker-bubble) { background: #fff; color: #20222a; box-shadow: 0 1px 3px rgba(33, 38, 53, .07); }
+html[data-theme="light"] body .chat-bubble-row.mine .chat-bubble:not(.sticker-bubble) .chat-bubble-meta,
+html[data-theme="light"] body .chat-bubble-row:not(.mine) .chat-bubble:not(.sticker-bubble) .chat-bubble-meta { color: #667080; }
+html[data-theme="light"] body .chat-bubble-row.mine .reply-quote { background: rgba(91, 108, 155, .13); color: #20222a; }
+html[data-theme="light"] body .chat-bubble-row.mine .reply-quote b { color: #445980; }
+html[data-theme="light"] body .chat-bubble-row.mine .chat-bubble a { color: #365ca4; }
+html[data-theme="light"] body .chat-searchbar { background: #fff; }
+html[data-theme="light"] body .chat-searchbar .ctrl-btn:hover { background: var(--light-control); color: var(--text); }
+
+/* Appearance page: no black tiles or inverted text on light backgrounds. */
+html[data-theme="light"] body .settings-pane :is(.st-profile-row, .st-list, .sg-card, .tk-item) { background: #fff; }
+html[data-theme="light"] body .settings-pane :is(.st-row:hover, .theme-option:hover) { background: #f0f1f5; }
+html[data-theme="light"] body .settings-pane .theme-option { background: #fff; color: var(--text); }
+html[data-theme="light"] body .settings-pane .theme-option.selected { background: var(--light-selected); color: #343e61; }
+html[data-theme="light"] body .settings-pane .dtp-btn { background: #fff; }
+html[data-theme="light"] body .settings-pane .dtp-btn:hover { background: #e9ebf2; }
+html[data-theme="light"] body .settings-pane .dtp-btn.active { background: #dce5f6; }
+html[data-theme="light"] body .settings-pane .dtp-off-btn { background: var(--light-control); color: var(--text); }
+html[data-theme="light"] body .settings-pane .dtp-off-btn.active { background: #dce5f6; color: #334b78; }
+html[data-theme="light"] body .settings-pane :is(.tk-upload-btn, .tk-play-circle) { background: var(--light-control); color: var(--text); }
+html[data-theme="light"] body .settings-pane :is(.tk-upload-btn, .tk-play-circle):hover { background: var(--light-hover); }
+html[data-theme="light"] body .settings-pane .tk-play-circle svg { color: var(--text) !important; }
+html[data-theme="light"] body .settings-pane :is(.tk-title, .dev-name) { color: var(--text); }
+html[data-theme="light"] body .settings-pane :is(.sg-note, .tk-artist, .tk-duration, .tk-empty) { color: var(--muted); }
+
+/* Music dialogs share the same light surfaces as appearance settings. */
+html[data-theme="light"] body .tk-sheet { background: #fff; color: var(--text); box-shadow: 0 20px 56px rgba(33, 38, 53, .2); }
+html[data-theme="light"] body .tk-sheet :is(.tk-pt, .modal-title) { color: var(--text); }
+html[data-theme="light"] body .tk-sheet :is(.tk-field, .tk-btn, .tk-cb, .tk-fav-btn) { background: var(--light-control); color: var(--text); }
+html[data-theme="light"] body .tk-sheet .tk-field input { color: var(--text); }
+html[data-theme="light"] body .tk-sheet .tk-cb.big,
+html[data-theme="light"] body .tk-sheet .tk-ok { background: #616b94; color: #fff; }
+html[data-theme="light"] body .np-strip { background: #fff; color: var(--text); }
+html[data-theme="light"] body .np-strip .np-pp { color: var(--text); }
+
+/* Separate matching header surfaces without changing the dark layout. */
+html[data-theme="light"] body #loggedInScreen #paneDm .dm-top {
+  width: auto;
+  height: 56px;
+  min-height: 56px;
+  margin: 4px 14px;
+  padding-inline: 12px;
+  border-radius: 20px;
+  background: #fff;
+}
+html[data-theme="light"] body .chat-view .header-container {
+  height: 56px;
+  margin: 4px 14px 4px 0;
+  border-radius: 20px;
+  background: #fff;
+}
+html[data-theme="light"] body .chat-view :is(.chat-top, .selection-header) {
+  height: 100%;
+  min-height: 0;
+  border-radius: inherit;
+  background: transparent;
+  padding-inline: 12px;
+}
+@media (max-width: 767px) {
+  html[data-theme="light"] body .chat-view .header-container { margin-left: 14px; }
+}
