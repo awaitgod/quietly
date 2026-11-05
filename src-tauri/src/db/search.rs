@@ -3,6 +3,15 @@ use rusqlite::{Result, params};
 
 impl Database {
     pub fn search_fts(&self, query: &str, chat_id: Option<&str>) -> Result<Vec<FtsSearchResult>> {
+        self.search_fts_scoped(query, chat_id, None)
+    }
+
+    pub fn search_fts_scoped(
+        &self,
+        query: &str,
+        chat_id: Option<&str>,
+        account_prefix: Option<&str>,
+    ) -> Result<Vec<FtsSearchResult>> {
         let conn = self.conn.lock().unwrap();
         let mut results = Vec::new();
 
@@ -34,11 +43,11 @@ impl Database {
             let mut stmt = conn.prepare(
                 "SELECT id, chat_id, sender_id, content, snippet(messages_fts, 3, '<mark>', '</mark>', '...', 15)
                  FROM messages_fts
-                 WHERE messages_fts MATCH ?1
+                 WHERE messages_fts MATCH ?1 AND (?2 IS NULL OR substr(chat_id, 1, length(?2)) = ?2)
                  ORDER BY rank
                  LIMIT 50",
             )?;
-            let rows = stmt.query_map(params![fts_query], |row| {
+            let rows = stmt.query_map(params![fts_query, account_prefix], |row| {
                 Ok(FtsSearchResult {
                     id: row.get(0)?,
                     chat_id: row.get(1)?,

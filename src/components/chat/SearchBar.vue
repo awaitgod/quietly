@@ -111,6 +111,6 @@ function handleClose() {
   background-color: rgba(255, 255, 255, 0.08);
 }
 
-.chat-searchbar:has(input:focus-visible) { outline: 2px solid #fff; outline-offset: 2px; }
+.chat-searchbar:has(input:focus-visible) { outline: none; }
 .chat-searchbar input:focus-visible { outline: none !important; box-shadow: none !important; }
 </style>

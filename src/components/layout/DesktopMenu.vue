@@ -9,6 +9,7 @@ import type { UserProfile } from '../../types'
 
 const emit = defineEmits<{
   (e: 'open-create-group'): void
+  (e: 'open-accounts'): void
 }>()
 
 const settingsStore = useSettingsStore()
@@ -71,6 +72,11 @@ function handleCreateGroup() {
       >
         <SolarIcon name="user-circle-linear" :size="22" />
         <span>Профиль</span>
+      </button>
+
+      <button type="button" class="dsk-item" @click="settingsStore.isDesktopMenuOpen = false; emit('open-accounts')">
+        <SolarIcon name="users-group-rounded-linear" :size="22" />
+        <span>Аккаунты</span>
       </button>
 
       <button
@@ -143,6 +149,7 @@ function handleCreateGroup() {
   position: fixed;
   left: 16px;
   top: calc(56px + var(--player-offset, 0px));
+  transition: top 260ms cubic-bezier(0.22, 1, 0.36, 1);
   z-index: 26;
   width: 268px;
   padding: var(--space-2);
@@ -155,6 +162,8 @@ function handleCreateGroup() {
   transform-origin: 20px -8px;
   animation: dskMenuIn 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28) both;
 }
+
+@media (prefers-reduced-motion: reduce) { .dsk-menu { transition: none; } }
 
 @keyframes dskMenuIn {
   from {

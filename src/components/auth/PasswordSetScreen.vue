@@ -10,8 +10,8 @@ const showPassword = ref(false)
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 
-const isLongEnough = computed(() => password.value.length >= 8)
-const hasLetterAndDigit = computed(() => /[a-zA-Z]/.test(password.value) && /[0-9]/.test(password.value))
+const isLongEnough = computed(() => password.value.length >= 8 && password.value.length <= 72)
+const hasLetterAndDigit = computed(() => /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,72}$/.test(password.value))
 const passwordsMatch = computed(() => password.value === confirmPassword.value)
 
 const canProceed = computed(() => {
@@ -62,7 +62,7 @@ async function handleSetPassword() {
       </div>
       <div class="hint-row">
         <span class="hint" :class="{ error: password.length > 0 && !isLongEnough }">
-          Минимум 8 символов (буквы и цифры)
+          От 8 до 72 символов: латинские буквы и цифры
         </span>
       </div>
     </div>
@@ -83,6 +83,8 @@ async function handleSetPassword() {
     </div>
 
     <div v-if="errorMessage" class="error-text">{{ errorMessage }}</div>
+
+    <div class="link-row"><span class="resend-link" @click="authStore.authScreen = 'profile_setup'">Назад</span></div>
 
     <div class="bottom-spacer"></div>
 

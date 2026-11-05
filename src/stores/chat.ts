@@ -5,6 +5,7 @@ import { supabase, FAV_ID, FAV_PROFILE, tablesApi, rpcApi, realtimeApi } from '.
 import { tauriSaveMessage, tauriGetMessages, tauriNotify } from '../services/tauriIpc';
 import type { Message, UserProfile } from '../types';
 import { useAuthStore } from './auth';
+import { usePresenceStore } from './presence';
 export interface ConversationItem {
     id: string;
     profile: UserProfile;
@@ -14,7 +15,10 @@ export interface ConversationItem {
 }
 export const useChatStore = defineStore('chat', () => {
     const authStore = useAuthStore();
+    const presenceStore = usePresenceStore();
     const conversations = ref<Map<string, ConversationItem>>(new Map());
+    const conversationsLoaded = ref(false);
+    const conversationsLoadFailed = ref(false);
     const activeChat = ref<UserProfile | null>(null);
     const messages = ref<Message[]>([]);
     const isMessagesLoading = ref(false);
@@ -139,9 +143,16 @@ export const useChatStore = defineStore('chat', () => {
                 });
             }
             setupGlobalRealtime();
+            conversationsLoadFailed.value = false;
         }
         catch (err) {
             console.error('[Chat] loadConversations error:', err);
+            if (authStore.user?.id === myId)
+                conversationsLoadFailed.value = true;
+        }
+        finally {
+            if (authStore.user?.id === myId)
+                conversationsLoaded.value = true;
         }
     }
     function setupGlobalRealtime() {
@@ -274,6 +285,8 @@ export const useChatStore = defineStore('chat', () => {
             chatLoadSeq++;
             messageCache.clear();
             conversations.value.clear();
+            conversationsLoaded.value = false;
+            conversationsLoadFailed.value = false;
             messages.value = [];
             activeChat.value = null;
         }
@@ -323,30 +336,39 @@ export const useChatStore = defineStore('chat', () => {
             }
         }
         await loadMessages(partner.id);
-        if (activeChat.value?.id === partner.id)
-            subscribeToPartnerPresence(partner.id);
     }
-    function subscribeToPartnerPresence(partnerId: string) {
-        if (!authStore.user?.id || partnerId === FAV_ID)
-            return;
-        const myId = authStore.user.id;
+    function subscribeToPartnerPresence(partnerId: string | null) {
         if (pairPresenceChannel) {
-            supabase.removeChannel(pairPresenceChannel);
+            void supabase.removeChannel(pairPresenceChannel);
+            pairPresenceChannel = null;
         }
-        pairPresenceChannel = realtimeApi.channelPairPresence(myId, partnerId)
-            .on('presence', { event: 'sync' }, () => {
-        })
+        presenceStore.setPairChannel(null);
+        if (!authStore.user?.id || !partnerId || partnerId === FAV_ID || partnerId.startsWith('sys:'))
+            return;
+        const channel = realtimeApi.channelPairPresence(authStore.user.id, partnerId);
+        pairPresenceChannel = channel;
+        presenceStore.setPairChannel(channel);
+        channel.on('presence', { event: 'sync' }, () => presenceStore.syncPair(channel))
             .on('broadcast', { event: 'typing' }, (event) => {
             if (event.payload?.from === partnerId) {
                 typingUsers.value.set(partnerId, activeChat.value?.name || '');
                 clearTimeout(typingTimeout);
-                typingTimeout = setTimeout(() => {
-                    typingUsers.value.delete(partnerId);
-                }, 3500);
+                typingTimeout = setTimeout(() => typingUsers.value.delete(partnerId), 3500);
             }
         })
-            .subscribe();
+            .subscribe((status) => {
+            if (status === 'SUBSCRIBED' && pairPresenceChannel === channel) {
+                presenceStore.setPairChannel(channel);
+                if (authStore.profile?.online_visibility !== 'nobody')
+                    void channel.track({ online_at: new Date().toISOString() });
+            }
+            if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') && pairPresenceChannel === channel)
+                presenceStore.setPairChannel(null);
+        });
     }
+    watch(() => [activeChat.value?.id, authStore.authScreen, authStore.user?.id], () => {
+        subscribeToPartnerPresence(authStore.authScreen === 'logged_in' ? activeChat.value?.id || null : null);
+    });
     function sendTyping() {
         if (!authStore.user?.id || !activeChat.value || activeChat.value.id === FAV_ID)
             return;
@@ -645,6 +667,8 @@ export const useChatStore = defineStore('chat', () => {
     }
     return {
         conversations,
+        conversationsLoaded,
+        conversationsLoadFailed,
         activeChat,
         messages,
         isMessagesLoading,

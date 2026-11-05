@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAuthStore, friendlyAuthError } from '../../stores/auth'
-import { supabase } from '../../services/supabase'
 import SolarIcon from '../common/SolarIcon.vue'
 
 const emit = defineEmits<{
@@ -9,10 +8,10 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
-const name = ref('')
-const username = ref('')
-const avatarPreview = ref<string | null>(null)
-const avatarBlob = ref<Blob | undefined>()
+const name = ref(authStore.profileDraft?.name || '')
+const username = ref(authStore.profileDraft?.username || '')
+const avatarPreview = ref<string | null>(authStore.profileDraft ? URL.createObjectURL(authStore.profileDraft.avatar) : null)
+const avatarBlob = ref<Blob | undefined>(authStore.profileDraft?.avatar)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const isCheckingUsername = ref(false)
@@ -22,15 +21,15 @@ const isSubmitting = ref(false)
 
 const isValidName = computed(() => {
   const len = name.value.trim().length
-  return len >= 2 && len <= 24
+  return len >= 3 && len <= 16
 })
 
 const isValidUsername = computed(() => {
-  return /^[a-z0-9_]{4,16}$/.test(username.value.trim().toLowerCase())
+  return /^[a-z0-9_]{4,12}$/.test(username.value.trim().toLowerCase())
 })
 
 const canProceed = computed(() => {
-  return isValidName.value && isValidUsername.value && !usernameError.value && !isSubmitting.value
+  return isValidName.value && isValidUsername.value && !!avatarBlob.value && !usernameError.value && !isCheckingUsername.value && !isSubmitting.value
 })
 
 function onAvatarClick() {
@@ -69,7 +68,7 @@ async function checkUsername() {
     return
   }
   if (!isValidUsername.value) {
-    usernameError.value = 'Латиница, цифры и _, от 4 до 16 символов'
+    usernameError.value = 'Латиница, цифры и _, от 4 до 12 символов'
     return
   }
 
@@ -77,12 +76,11 @@ async function checkUsername() {
   usernameError.value = ''
 
   try {
-    const { data } = await supabase.from('profiles').select('id').eq('username', un).maybeSingle()
-    if (data && data.id !== authStore.user?.id) {
+    if (!await authStore.checkUsernameAvailable(un)) {
       usernameError.value = 'Этот юзернейм уже занят'
     }
   } catch (err) {
-    console.warn('Error checking username:', err)
+    usernameError.value = friendlyAuthError(err)
   } finally {
     isCheckingUsername.value = false
   }
@@ -129,7 +127,7 @@ async function handleNext() {
         v-model="name"
         type="text"
         placeholder="Ваше имя"
-        maxlength="24"
+        maxlength="16"
         autocomplete="name"
       />
     </div>
@@ -143,10 +141,10 @@ async function handleNext() {
           type="text"
           class="with-prefix"
           placeholder="username"
-          maxlength="16"
+          maxlength="12"
           autocomplete="off"
           spellcheck="false"
-          @input="username = username.toLowerCase().replace(/[^a-z0-9_]/g, '')"
+          @input="username = username.toLowerCase().replace(/[^a-z0-9_]/g, ''); usernameError = ''"
           @blur="checkUsername"
         />
       </div>

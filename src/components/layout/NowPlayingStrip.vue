@@ -20,6 +20,7 @@ function openPlayer() {
 </script>
 
 <template>
+  <Transition name="player-strip">
   <div v-if="audioStore.isNowPlayingStripVisible && audioStore.currentTrack" id="npGlobal" class="np-strip">
     <button
       type="button"
@@ -51,6 +52,7 @@ function openPlayer() {
       <SolarIcon name="close-circle-linear" :size="16" />
     </button>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -72,6 +74,14 @@ function openPlayer() {
   right: 0;
   top: 0;
   z-index: 50;
+}
+
+.player-strip-enter-active, .player-strip-leave-active {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 260ms ease;
+}
+.player-strip-enter-from, .player-strip-leave-to { transform: translateY(-100%); opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .player-strip-enter-active, .player-strip-leave-active { transition: none; }
 }
 
 .np-pp, .np-x {

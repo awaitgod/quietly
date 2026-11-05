@@ -2,11 +2,13 @@ import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import { supabase, tablesApi, rpcApi, realtimeApi } from '../services/supabase';
 import { tauriSaveMessage, tauriNotify } from '../services/tauriIpc';
-import type { Group, GroupMember, Message, UserProfile } from '../types';
+import type { Group, GroupMember, GroupMessage, Message, UserProfile } from '../types';
 import { useAuthStore } from './auth';
 export const useGroupsStore = defineStore('groups', () => {
     const authStore = useAuthStore();
     const groups = ref<Group[]>([]);
+    const groupsLoaded = ref(false);
+    const groupsLoadFailed = ref(false);
     const activeGroup = ref<Group | null>(null);
     const groupMessages = ref<Message[]>([]);
     const groupMembers = ref<GroupMember[]>([]);
@@ -31,11 +33,21 @@ export const useGroupsStore = defineStore('groups', () => {
             const list: Group[] = (data || [])
                 .map((row: any) => row.groups)
                 .filter(Boolean);
-            groups.value = list;
+            if (authStore.user?.id !== myId)
+                return;
+            const previous = new Map(groups.value.map(group => [String(group.id), group.last_message]));
+            groups.value = list.map(group => ({ ...group, last_message: group.last_message || previous.get(String(group.id)) || null }));
+            groupsLoadFailed.value = false;
             setupGroupListRealtime();
         }
         catch (err) {
             console.error('[Groups] loadUserGroups error:', err);
+            if (authStore.user?.id === myId)
+                groupsLoadFailed.value = true;
+        }
+        finally {
+            if (authStore.user?.id === myId)
+                groupsLoaded.value = true;
         }
     }
     function setupGroupListRealtime() {
@@ -43,8 +55,14 @@ export const useGroupsStore = defineStore('groups', () => {
             return;
         const myId = authStore.user.id;
         groupListChannel = realtimeApi.channelGroupList(myId)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, () => {
-            loadUserGroups();
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, (payload) => {
+            const message = payload.new as GroupMessage;
+            const group = groups.value.find(item => String(item.id) === String(message.group_id));
+            if (!group)
+                return;
+            const previousTime = group.last_message?.created_at ? Date.parse(group.last_message.created_at) : 0;
+            if (!previousTime || Date.parse(message.created_at) >= previousTime)
+                group.last_message = message;
         })
             .subscribe();
     }
@@ -65,6 +83,8 @@ export const useGroupsStore = defineStore('groups', () => {
             groupMessages.value = [];
             groupProfiles.value.clear();
             groups.value = [];
+            groupsLoaded.value = false;
+            groupsLoadFailed.value = false;
         }
     }, { immediate: true, flush: 'sync' });
     watch(groupMembers, value => {
@@ -396,6 +416,8 @@ export const useGroupsStore = defineStore('groups', () => {
     }
     return {
         groups,
+        groupsLoaded,
+        groupsLoadFailed,
         activeGroup,
         groupMessages,
         groupMembers,

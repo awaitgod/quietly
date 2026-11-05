@@ -27,12 +27,18 @@ async function handleLogin() {
   }
 }
 
-function handleForgot() {
-  authStore.authScreen = 'forgot'
+async function handleForgot() {
+  if (isSubmitting.value) return
+  isSubmitting.value = true
+  errorMessage.value = ''
+  try { await authStore.beginRecovery() }
+  catch (err) { errorMessage.value = friendlyAuthError(err) }
+  finally { isSubmitting.value = false }
 }
 
-function changeAccount() {
-  authStore.authScreen = 'email'
+async function changeAccount() {
+  try { await authStore.changeEmail() }
+  catch (err) { errorMessage.value = friendlyAuthError(err) }
 }
 </script>
 

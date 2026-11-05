@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase, authApi, rpcApi, tablesApi, externalApi } from '../services/supabase';
 import type { UserProfile, UserDevice } from '../types';
+import { activeAccountSlot, pendingAuthKey, rememberAccount, removeAccount } from '../services/accountStorage';
+import { setLocalCacheAccount } from '../services/native/messages';
 export function friendlyAuthError(e: any): string {
     const t = e?.message || '';
     const n = t.match(/after (\d+) seconds?/i);
@@ -40,64 +42,112 @@ export const useAuthStore = defineStore('auth', () => {
     const isExisting = ref(false);
     const otpDraft = ref('');
     const otpCountdown = ref(0);
+    const authNotice = ref('');
+    const profileDraft = ref<{
+        name: string;
+        username: string;
+        avatar: Blob;
+    } | null>(null);
+    const recoveryRequested = ref(false);
     let timer: any = null;
     let heartbeatTimer: any = null;
     async function initAuth() {
         isLoading.value = true;
         try {
-            const { data: { session } } = await authApi.getSession();
+            const { data: { session }, error } = await authApi.getSession();
+            if (error)
+                throw error;
             if (session?.user) {
                 user.value = session.user;
+                emailDraft.value = session.user.email || '';
                 await loadProfile(session.user.id);
-                await syncDeviceSession(session);
-                await checkAdminRole();
-                if (profile.value?.username) {
-                    authScreen.value = 'logged_in';
+                if (localStorage.getItem(pendingAuthKey()) === '1') {
+                    if (profile.value) {
+                        isExisting.value = true;
+                        authScreen.value = 'password_login';
+                    }
+                    else {
+                        await rpcApi.deleteIncompleteAccount();
+                        await authApi.signOut({ scope: 'local' });
+                        user.value = null;
+                        localStorage.removeItem(pendingAuthKey());
+                        authNotice.value = 'Регистрация не была завершена. Начните заново.';
+                        authScreen.value = 'email';
+                    }
+                }
+                else if (profile.value?.username) {
+                    await routeAuthenticated(session);
                 }
                 else {
                     authScreen.value = 'profile_setup';
                 }
-                startHeartbeat();
             }
             else {
+                localStorage.removeItem(pendingAuthKey());
                 authScreen.value = 'email';
             }
         }
         catch (err) {
             console.error('[Auth] Init error:', err);
+            authNotice.value = 'Не удалось проверить аккаунт. Проверьте соединение и попробуйте снова.';
             authScreen.value = 'email';
         }
         finally {
             isLoading.value = false;
         }
-        supabase.auth.onAuthStateChange(async (event, session) => {
-            if (session?.user) {
-                user.value = session.user;
-                await loadProfile(session.user.id);
-                await syncDeviceSession(session);
-                await checkAdminRole();
-            }
-            else if (event === 'SIGNED_OUT') {
+        supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_OUT') {
                 user.value = null;
                 profile.value = null;
                 isAdminUser.value = false;
                 stopHeartbeat();
                 authScreen.value = 'email';
             }
+            else if (session?.user) {
+                user.value = session.user;
+            }
         });
     }
     async function loadProfile(userId: string) {
-        try {
-            const { data, error } = await tablesApi.profiles.getById(userId);
-            if (error)
-                throw error;
-            if (data) {
-                profile.value = data as UserProfile;
+        const { data, error } = await tablesApi.profiles.getById(userId);
+        if (error)
+            throw error;
+        profile.value = (data as UserProfile | null) ?? null;
+    }
+    async function routeAuthenticated(session?: any, notification?: 'welcome' | 'new_login') {
+        if (!user.value?.id)
+            throw new Error('Сессия не найдена. Войдите снова.');
+        await loadProfile(user.value.id);
+        if (!profile.value?.username)
+            throw new Error('Профиль не найден.');
+        if (profile.value.deleted_at || profile.value.banned_at) {
+            authNotice.value = 'Аккаунт заблокирован или удален.';
+            await authApi.signOut({ scope: 'local' });
+            throw new Error(authNotice.value);
+        }
+        await syncDeviceSession(session);
+        if (!user.value)
+            throw new Error('Ваш сеанс был завершён на другом устройстве.');
+        await checkAdminRole();
+        if (notification) {
+            try {
+                const body = notification === 'welcome'
+                    ? `Добро пожаловать в Quietly! ${user.value.email || ''}`.trim()
+                    : 'Новый вход в аккаунт с устройства Quietly Desktop (Windows).';
+                const { error } = await tablesApi.systemMessages.insert({ user_id: user.value.id, kind: notification, body });
+                if (error)
+                    console.warn('[Auth] system message:', error);
+            }
+            catch (error) {
+                console.warn('[Auth] system message:', error);
             }
         }
-        catch (err) {
-            console.error('[Auth] loadProfile error:', err);
-        }
+        rememberAccount(profile.value, user.value.email || '');
+        setLocalCacheAccount(user.value.id);
+        localStorage.removeItem(pendingAuthKey());
+        recoveryRequested.value = false;
+        startHeartbeat();
+        authScreen.value = 'logged_in';
     }
     async function syncDeviceSession(session?: any) {
         if (!user.value?.id)
@@ -135,7 +185,6 @@ export const useAuthStore = defineStore('auth', () => {
             const myId = user.value.id;
             const now = new Date().toISOString();
             try {
-                await tablesApi.profiles.updateLastSeen(myId, now);
                 await tablesApi.userDevices.updateLastSeen(myId, getOrCreateDeviceId(), now);
             }
             catch (e) {
@@ -168,7 +217,9 @@ export const useAuthStore = defineStore('auth', () => {
     async function setOnlineVisibility(visibility: 'all' | 'contacts' | 'nobody') {
         if (!user.value?.id)
             return;
-        await tablesApi.profiles.updateOnlineVisibility(user.value.id, visibility);
+        const { error } = await tablesApi.profiles.updateOnlineVisibility(user.value.id, visibility);
+        if (error)
+            throw error;
         if (profile.value) {
             profile.value.online_visibility = visibility;
         }
@@ -220,14 +271,9 @@ export const useAuthStore = defineStore('auth', () => {
         }, 1000);
     }
     async function checkEmailExists(email: string): Promise<boolean> {
-        try {
-            const exists = await rpcApi.emailExists(email);
-            isExisting.value = exists;
-            return exists;
-        }
-        catch {
-            return false;
-        }
+        const exists = await rpcApi.emailExists(email);
+        isExisting.value = exists;
+        return exists;
     }
     async function sendOtp(email: string) {
         emailDraft.value = email.trim().toLowerCase();
@@ -237,64 +283,108 @@ export const useAuthStore = defineStore('auth', () => {
         startOtpTimer();
         authScreen.value = 'otp';
     }
-    async function verifyOtp(token: string) {
-        const { data, error } = await authApi.verifyOtp(emailDraft.value, token);
-        if (error)
-            throw error;
-        if (data.user) {
-            user.value = data.user;
-            await loadProfile(data.user.id);
-            if (isExisting.value || profile.value?.username) {
-                authScreen.value = 'password_login';
-            }
-            else {
-                authScreen.value = 'profile_setup';
-            }
+    async function changeEmail() {
+        if (localStorage.getItem(pendingAuthKey()) === '1') {
+            const { error } = await authApi.signOut({ scope: 'local' });
+            if (error)
+                throw error;
+            localStorage.removeItem(pendingAuthKey());
+            user.value = null;
+            profile.value = null;
         }
+        profileDraft.value = null;
+        clearInterval(timer);
+        otpCountdown.value = 0;
+        recoveryRequested.value = false;
+        authScreen.value = 'email';
+    }
+    async function beginRecovery() {
+        if (localStorage.getItem(pendingAuthKey()) === '1' && user.value?.id && user.value.email?.toLowerCase() === emailDraft.value.toLowerCase()) {
+            authScreen.value = 'forgot';
+            return;
+        }
+        recoveryRequested.value = true;
+        try {
+            await sendOtp(emailDraft.value);
+        }
+        catch (error) {
+            recoveryRequested.value = false;
+            throw error;
+        }
+    }
+    async function verifyOtp(token: string) {
+        if (!/^\d{6}$/.test(token))
+            throw new Error('Введите шестизначный код.');
+        localStorage.setItem(pendingAuthKey(), '1');
+        const { data, error } = await authApi.verifyOtp(emailDraft.value, token);
+        if (error) {
+            localStorage.removeItem(pendingAuthKey());
+            throw error;
+        }
+        if (!data.user)
+            throw new Error('Сессия не найдена. Попробуйте ещё раз.');
+        user.value = data.user;
+        await loadProfile(data.user.id);
+        isExisting.value = !!profile.value;
+        authScreen.value = profile.value ? (recoveryRequested.value ? 'forgot' : 'password_login') : 'profile_setup';
     }
     async function loginWithPassword(password: string) {
         const { data, error } = await authApi.signInWithPassword(emailDraft.value, password);
         if (error)
             throw error;
-        if (data.user) {
-            user.value = data.user;
-            await loadProfile(data.user.id);
-            authScreen.value = 'logged_in';
-        }
+        if (!data.user)
+            throw new Error('Не удалось войти в аккаунт.');
+        user.value = data.user;
+        await routeAuthenticated(data.session, 'new_login');
+    }
+    async function checkUsernameAvailable(username: string) {
+        const [profiles, groups] = await Promise.all([
+            tablesApi.profiles.checkUsername(username, user.value?.id),
+            tablesApi.groups.checkUsername(username),
+        ]);
+        if (profiles.error)
+            throw profiles.error;
+        if (groups.error)
+            throw groups.error;
+        return !(profiles.data?.length || groups.data?.length);
     }
     async function saveProfileSetup(name: string, username: string, avatarBlob?: Blob) {
         if (!user.value?.id)
-            throw new Error('No user session');
-        let avatarUrl: string | null = null;
-        if (avatarBlob) {
-            const path = `${user.value.id}/avatar_${Date.now()}.jpg`;
-            const { error: upErr } = await supabase.storage.from('avatars').upload(path, avatarBlob, {
-                upsert: true,
-                contentType: 'image/jpeg',
-            });
-            if (!upErr) {
-                avatarUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
-            }
-        }
-        const profileData: any = {
-            id: user.value.id,
-            name,
-            username: username.toLowerCase(),
-        };
-        if (avatarUrl) {
-            profileData.avatar_url = avatarUrl;
-        }
-        const { error } = await tablesApi.profiles.upsertProfile(profileData);
-        if (error)
-            throw error;
-        await loadProfile(user.value.id);
+            throw new Error('Сессия не найдена. Войдите снова.');
+        if (!avatarBlob)
+            throw new Error('Выберите аватар.');
+        if (!await checkUsernameAvailable(username))
+            throw new Error('Этот юзернейм уже занят.');
+        profileDraft.value = { name, username: username.toLowerCase(), avatar: avatarBlob };
         authScreen.value = 'password_set';
     }
     async function setInitialPassword(password: string) {
+        if (!user.value?.id || !profileDraft.value)
+            throw new Error('Данные профиля не найдены. Вернитесь к настройке профиля.');
+        const draft = profileDraft.value;
         const { error } = await authApi.updatePassword(password);
         if (error)
             throw error;
-        authScreen.value = 'logged_in';
+        const path = `${user.value.id}/avatar_${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(path, draft.avatar, { upsert: true, contentType: 'image/jpeg' });
+        if (uploadError)
+            throw uploadError;
+        const avatar_url = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+        const { error: profileError } = await tablesApi.profiles.upsertProfile({ id: user.value.id, name: draft.name, username: draft.username, avatar_url });
+        if (profileError)
+            throw profileError;
+        const { data: { session } } = await authApi.getSession();
+        await routeAuthenticated(session, 'welcome');
+        profileDraft.value = null;
+    }
+    async function resetPassword(password: string) {
+        if (localStorage.getItem(pendingAuthKey()) !== '1' || !user.value?.id || !profile.value)
+            throw new Error('Сначала подтвердите почту кодом.');
+        const { error } = await authApi.updatePassword(password);
+        if (error)
+            throw error;
+        const { data: { session } } = await authApi.getSession();
+        await routeAuthenticated(session, 'new_login');
     }
     async function deleteIncompleteAccount() {
         await rpcApi.deleteIncompleteAccount();
@@ -306,6 +396,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
     async function logout() {
         clearInterval(timer);
+        localStorage.removeItem(pendingAuthKey());
+        profileDraft.value = null;
+        recoveryRequested.value = false;
         stopHeartbeat();
         if (user.value?.id) {
             try {
@@ -314,7 +407,11 @@ export const useAuthStore = defineStore('auth', () => {
             catch (e) {
             }
         }
-        await authApi.signOut({ scope: 'local' });
+        const { error } = await authApi.signOut({ scope: 'local' });
+        if (error)
+            throw error;
+        removeAccount(activeAccountSlot());
+        setLocalCacheAccount(null);
         user.value = null;
         profile.value = null;
         isAdminUser.value = false;
@@ -331,11 +428,17 @@ export const useAuthStore = defineStore('auth', () => {
         isExisting,
         otpDraft,
         otpCountdown,
+        authNotice,
+        profileDraft,
         initAuth,
         loadProfile,
         checkEmailExists,
         sendOtp,
         verifyOtp,
+        beginRecovery,
+        resetPassword,
+        changeEmail,
+        checkUsernameAvailable,
         loginWithPassword,
         saveProfileSetup,
         setInitialPassword,

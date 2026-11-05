@@ -1,11 +1,12 @@
 {
   "name": "quietly-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "test": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "tailwindcss": "^4.3.4",
     "typescript": "~6.0.3",
     "vite": "^8.3.5",
+    "vitest": "^5.1.0",
     "vue-tsc": "^3.3.13"
   }
 }

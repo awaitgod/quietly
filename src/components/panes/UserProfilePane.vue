@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
+import { usePresenceStore } from '../../stores/presence'
 import { useSettingsStore } from '../../stores/settings'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
@@ -10,6 +11,7 @@ import SolarIcon from '../common/SolarIcon.vue'
 import EmojiText from '../common/EmojiText.vue'
 import GroupManager from '../modals/GroupManager.vue'
 
+const presence = usePresenceStore()
 const settings = useSettingsStore()
 const chat = useChatStore()
 const groups = useGroupsStore()
@@ -18,6 +20,9 @@ const emit = defineEmits<{ (e: 'send-gift', recipient: { id: string; name: strin
 const copied = ref(false)
 const user = computed(() => settings.viewedUser)
 const group = computed(() => !user.value ? groups.activeGroup : null)
+watch(() => user.value?.id, (id, oldId) => { if (oldId) presence.unwatchUser(oldId); if (id) presence.watchUser(id) }, { immediate: true })
+onUnmounted(() => { if (user.value?.id) presence.unwatchUser(user.value.id) })
+const status = computed(() => user.value ? presence.statusFor(user.value.id) : { text: '', online: false })
 const favorite = computed(() => user.value?.id === FAV_ID)
 const title = computed(() => user.value?.name || group.value?.name || '')
 const avatar = computed(() => user.value?.avatar_url || group.value?.avatar_url)
@@ -51,7 +56,7 @@ async function copyUsername() {
           <span v-else>{{ title.charAt(0).toUpperCase() }}</span>
         </div>
         <h1><EmojiText :text="title" /></h1>
-        <p v-if="favorite" class="profile-subtitle">Бот</p>
+        <p v-if="user && status.text" class="profile-subtitle" :class="{ online: status.online }">{{ status.text }}</p>
         <p v-else-if="group" class="profile-subtitle">Участников: {{ groups.groupMembers.length }}</p>
       </div>
       <div class="profile-actions">
@@ -87,6 +92,7 @@ async function copyUsername() {
 .profile-avatar.profile-group { background: #5c62d6; color: white; }
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
 h1 { margin: var(--space-4) 0 0; color: var(--text); font-size: var(--text-24); line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
+.profile-subtitle.online { color: #3b82f6; }
 .profile-subtitle { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-14); }
 .gift-action { position: static; flex: none; }
 .profile-actions { display: flex; gap: var(--space-2); align-items: flex-end; }

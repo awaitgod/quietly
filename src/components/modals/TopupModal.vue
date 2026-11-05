@@ -218,4 +218,20 @@ async function handlePay() {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+:global(html[data-theme="light"]) .tu-row {
+  background-color: #f0f1f5;
+  color: #20212a;
+}
+:global(html[data-theme="light"]) .tu-row:hover {
+  background-color: #e5e7ef;
+}
+:global(html[data-theme="light"]) .tu-row.active {
+  background-color: #e8edff;
+  border-color: #4a63f0;
+}
+:global(html[data-theme="light"]) .tu-price { color: #3151b8; }
+:global(html[data-theme="light"]) .pm-radio { background-color: #f0f1f5; color: #20212a; }
+:global(html[data-theme="light"]) .btn-primary { background-color: #20212a; color: #fff; }
+:global(html[data-theme="light"]) .btn-primary:disabled { background-color: #dedfe5; color: #62636c; opacity: 1; }
 </style>

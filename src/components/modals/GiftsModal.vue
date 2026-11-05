@@ -125,7 +125,7 @@ async function sendSelectedGift() {
 
 <style scoped>
 :global(html[data-theme="light"]) .gm-close-btn { background: #e8e8ed; }
-:global(html[data-theme="light"]) .gm-gift-card:hover { background: #e5e5ec; }
+
 
 .modal-backdrop {
   position: fixed;
@@ -221,6 +221,11 @@ async function sendSelectedGift() {
   transform: translateY(-2px);
   background-color: #1f1f26;
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+:global(html[data-theme="light"]) .gm-gift-card:hover {
+  background-color: #e5e5ec;
+  border-color: #d2d2dc;
 }
 
 .gm-gift-card:active {

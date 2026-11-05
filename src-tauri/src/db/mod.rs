@@ -53,6 +53,28 @@ mod tests {
     }
 
     #[test]
+    fn search_is_isolated_between_accounts() {
+        let db = Database::new(":memory:".into()).unwrap();
+        let message = |id: &str, chat_id: &str| LocalMessage {
+            id: id.into(),
+            chat_id: chat_id.into(),
+            sender_id: "sender".into(),
+            content: "shared phrase".into(),
+            reply_to: None,
+            created_at: "2026-01-01".into(),
+            status: None,
+            pinned_at: None,
+            is_favorite: None,
+            reactions_json: None,
+        };
+        db.upsert_message(&message("a:one", "a:chat")).unwrap();
+        db.upsert_message(&message("b:one", "b:chat")).unwrap();
+        let results = db.search_fts_scoped("shared", None, Some("a:")).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "a:one");
+    }
+
+    #[test]
     fn key_value_round_trip() {
         let db = Database::new(":memory:".into()).unwrap();
         db.set_kv("key", "value").unwrap();

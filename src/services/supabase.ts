@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { accountSessionKey } from './accountStorage';
 export const SUPABASE_URL = 'https://csgpzwbqcguhzkklhguo.supabase.co';
 export const SUPABASE_ANON_KEY = 'sb_publishable_1KaF6XrktOXtDOMVfs5RyA_L2uFqmtM';
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -7,6 +8,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         autoRefreshToken: true,
         detectSessionInUrl: false,
         storage: localStorage,
+        storageKey: accountSessionKey(),
     },
 });
 export const FAV_ID = 'quietly_saved_notes_favorite';

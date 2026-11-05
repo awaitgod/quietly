@@ -1,6 +1,6 @@
 [package]
 name = "quietly"
-version = "0.1.0"
+version = "0.1.1"
 description = "Quietly Desktop Messenger"
 authors = ["Quietly Team"]
 edition = "2024"

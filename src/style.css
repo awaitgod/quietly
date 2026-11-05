@@ -146,16 +146,15 @@ html body :is(.app-overlay.show, .modal-backdrop, .create-overlay, .gm-overlay, 
 @media (prefers-reduced-motion: reduce) {
   html body :is(.app-overlay.show, .modal-backdrop, .create-overlay, .gm-overlay, .pack-overlay, .preview-overlay, .selection-overlay, .msg-menu-overlay, .tk-ov.show):not(#quietly-modal-specificity) { animation: none; }
 }
-/* One quick focus indicator for editable controls. */
-:root, html[data-theme="light"] { --focus-ring: #fff; }
-html body :is(input, textarea, select, [contenteditable="true"]):focus {
-  box-shadow: none !important;
+/* Text fields stay borderless in both themes, including while focused. */
+html body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), textarea, select, [contenteditable="true"]) {
+  border: 0 !important;
   outline: none !important;
 }
-html body :is(input, textarea, select, [contenteditable="true"]):focus-visible {
-  outline: 2px solid #fff !important;
-  outline-offset: 2px;
-  transition: outline-color .1s ease;
+html body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(:-webkit-autofill), textarea, select, [contenteditable="true"]),
+html body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(:-webkit-autofill), textarea, select, [contenteditable="true"]):focus-visible {
+  box-shadow: none !important;
+  outline: none !important;
 }
 /* Dark theme uses the same inset header geometry as the light theme. */
 html:not([data-theme="light"]) body #loggedInScreen #paneDm .dm-top {

@@ -75,8 +75,9 @@ async function resendCode() {
   }
 }
 
-function changeEmail() {
-  authStore.authScreen = 'email'
+async function changeEmail() {
+  try { await authStore.changeEmail() }
+  catch (err) { errorMessage.value = friendlyAuthError(err) }
 }
 </script>
 

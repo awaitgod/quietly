@@ -5,7 +5,7 @@ export const realtimeApi = {
     channelOnlineUsers: () => supabase.channel('online-users'),
     channelPairPresence: (userIdA: string, userIdB: string) => {
         const [minId, maxId] = [userIdA, userIdB].sort();
-        return supabase.channel(`presence-${minId}-${maxId}`);
+        return supabase.channel(`presence-${minId}-${maxId}`, { config: { presence: { key: userIdA } } });
     },
     channelTypingInbox: (userId: string) => supabase.channel(`typing-inbox-${userId}`),
     channelMeLive: (userId: string) => supabase.channel(`me-live-${userId}`),

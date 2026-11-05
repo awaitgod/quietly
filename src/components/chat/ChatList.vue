@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import EmojiText from '../common/EmojiText.vue'
 
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
@@ -13,6 +13,18 @@ const authStore = useAuthStore()
 const chatStore = useChatStore()
 const groupsStore = useGroupsStore()
 const settingsStore = useSettingsStore()
+
+const initialLoadComplete = computed(() => chatStore.conversationsLoaded && groupsStore.groupsLoaded)
+const initialLoadFailed = computed(() => chatStore.conversationsLoadFailed || groupsStore.groupsLoadFailed)
+const animateReordering = ref(false)
+let loadGeneration = 0
+watch(initialLoadComplete, async (ready) => {
+  const generation = ++loadGeneration
+  animateReordering.value = false
+  if (!ready) return
+  await nextTick()
+  requestAnimationFrame(() => { if (generation === loadGeneration) animateReordering.value = true })
+}, { immediate: true, flush: 'post' })
 
 const totalUnread = computed(() => {
   return chatStore.totalUnreadCount + groupsStore.totalGroupUnread
@@ -115,7 +127,7 @@ function toggleDesktopMenu() {
     </div>
 
     <!-- Rounded Floating Chats Card Container -->
-    <TransitionGroup tag="ul" name="chat-order" class="chat-list">
+    <TransitionGroup tag="ul" name="chat-order" :move-class="animateReordering ? 'chat-order-move' : 'chat-order-initial'" class="chat-list">
       <li v-for="chat in combinedChatList" :key="chat.id">
         <button
           type="button"
@@ -186,7 +198,13 @@ function toggleDesktopMenu() {
         </button>
       </li>
 
-      <li v-if="combinedChatList.length === 0" key="empty-chats" class="empty-chats">
+      <li v-if="combinedChatList.length === 0 && !initialLoadComplete" key="loading-chats" class="chat-loading" aria-label="Загружаем чаты" role="status">
+        <div v-for="n in 5" :key="n" class="chat-loading-row"><span class="chat-loading-avatar"></span><span class="chat-loading-lines"><span></span><span></span></span></div>
+      </li>
+      <li v-else-if="combinedChatList.length === 0 && initialLoadFailed" key="chats-error" class="empty-chats">
+        Не удалось загрузить чаты. Проверьте подключение к интернету.
+      </li>
+      <li v-else-if="combinedChatList.length === 0 && initialLoadComplete" key="empty-chats" class="empty-chats">
         У вас пока нет активных диалогов.<br />
         Используйте поиск или контакты, чтобы начать общение.
       </li>
@@ -200,6 +218,14 @@ function toggleDesktopMenu() {
 :global(html[data-theme="light"]) .dm-hamburger-btn:hover { background: #e2e2e8; }
 
 .chat-order-move { transition: transform 200ms ease; }
+.chat-loading { list-style: none; }
+.chat-loading-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.chat-loading-avatar { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--card); }
+.chat-loading-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.chat-loading-lines span { display: block; height: 9px; border-radius: 99px; background: var(--card); }
+.chat-loading-lines span:first-child { width: 42%; }
+.chat-loading-lines span:last-child { width: 72%; }
+:global(html[data-theme="light"]) .chat-loading-avatar, :global(html[data-theme="light"]) .chat-loading-lines span { background: #e9eaf0; }
 @media (prefers-reduced-motion: reduce) { .chat-order-move { transition: none; } }
 .chat-list-pane {
   display: flex;

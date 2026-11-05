@@ -2,16 +2,19 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useAuthStore, friendlyAuthError } from '../../stores/auth'
 import SolarIcon from '../common/SolarIcon.vue'
+import { savedAccounts } from '../../services/accountStorage'
 
 const emit = defineEmits<{
   (e: 'open-legal', doc: 'terms' | 'policy'): void
+  (e: 'open-accounts'): void
 }>()
 
 const authStore = useAuthStore()
 const email = ref('')
 const isAgreed = ref(false)
 const isSubmitting = ref(false)
-const errorMessage = ref('')
+const errorMessage = ref(authStore.authNotice)
+authStore.authNotice = ''
 
 // Typewriter effect matching original Quietly
 const fullPlaceholder = 'quietly@gmail.com'
@@ -148,6 +151,7 @@ async function handleNext() {
 
     <div v-if="errorMessage" class="error-text">{{ errorMessage }}</div>
 
+    <div v-if="savedAccounts().length" class="link-row"><button type="button" class="btn-text" @click="emit('open-accounts')">Другие аккаунты</button></div>
     <div class="bottom-spacer"></div>
 
     <button

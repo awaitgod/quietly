@@ -9,6 +9,7 @@ import { useContactsStore } from './stores/contacts'
 import { useSettingsStore } from './stores/settings'
 import { useAudioStore } from './stores/audio'
 import { useEconomyStore } from './stores/economy'
+import { usePresenceStore } from './stores/presence'
 
 // Auth components
 import BootLoader from './components/auth/BootLoader.vue'
@@ -17,6 +18,7 @@ import OtpScreen from './components/auth/OtpScreen.vue'
 import ProfileSetup from './components/auth/ProfileSetup.vue'
 import PasswordLoginScreen from './components/auth/PasswordLoginScreen.vue'
 import PasswordSetScreen from './components/auth/PasswordSetScreen.vue'
+import ForgotPasswordScreen from './components/auth/ForgotPasswordScreen.vue'
 import LegalModal from './components/auth/LegalModal.vue'
 
 // Layout & Panes
@@ -40,6 +42,7 @@ import GroupCreateModal from './components/modals/GroupCreateModal.vue'
 import AudioPlayerModal from './components/modals/AudioPlayerModal.vue'
 import TrackUploadModal from './components/modals/TrackUploadModal.vue'
 import GiftsModal from './components/modals/GiftsModal.vue'
+import AccountSwitcherModal from './components/modals/AccountSwitcherModal.vue'
 import SolarIcon from './components/common/SolarIcon.vue'
 
 const authStore = useAuthStore()
@@ -49,11 +52,13 @@ const contactsStore = useContactsStore()
 const settingsStore = useSettingsStore()
 const audioStore = useAudioStore()
 const economyStore = useEconomyStore()
+const presenceStore = usePresenceStore()
 
 const legalDocType = ref<'terms' | 'policy' | null>(null)
 const cropperFile = ref<File | null>(null)
 const profileSetupRef = ref<any>(null)
 const isCreateGroupOpen = ref(false)
+const isAccountSwitcherOpen = ref(false)
 const giftRecipient = ref<{ id: string; name: string } | null>(null)
 function openGiftCatalog(recipient?: { id: string; name: string }) {
   giftRecipient.value = recipient || (authStore.user?.id ? { id: authStore.user.id, name: authStore.profile?.name || 'Вы' } : null)
@@ -85,6 +90,17 @@ async function loadAppData() {
 }
 
 watch(
+  () => [authStore.authScreen, authStore.user?.id] as const,
+  ([screen, id]) => {
+    if (screen === 'logged_in' && id) void presenceStore.start(id)
+    else presenceStore.stop()
+  },
+  { immediate: true }
+)
+watch(() => authStore.profile?.online_visibility, () => { void presenceStore.updateOwnPresence() })
+onUnmounted(() => { void presenceStore.writeLastSeen(); presenceStore.stop() })
+
+watch(
   () => authStore.authScreen,
   async (newScreen) => {
     if (newScreen === 'logged_in') {
@@ -96,10 +112,6 @@ watch(
 onMounted(async () => {
   settingsStore.initTheme()
   await authStore.initAuth()
-
-  if (authStore.authScreen === 'logged_in') {
-    await loadAppData()
-  }
 })
 
 function onOpenLegal(doc: 'terms' | 'policy') {
@@ -126,6 +138,7 @@ function onCropped(blob: Blob) {
       <EmailScreen
         v-if="authStore.authScreen === 'email'"
         @open-legal="onOpenLegal"
+        @open-accounts="isAccountSwitcherOpen = true"
       />
       <OtpScreen v-else-if="authStore.authScreen === 'otp'" />
       <ProfileSetup
@@ -135,6 +148,7 @@ function onCropped(blob: Blob) {
       />
       <PasswordLoginScreen v-else-if="authStore.authScreen === 'password_login'" />
       <PasswordSetScreen v-else-if="authStore.authScreen === 'password_set'" />
+      <ForgotPasswordScreen v-else-if="authStore.authScreen === 'forgot'" />
     </template>
 
     <!-- Main Logged In Application Screen -->
@@ -150,7 +164,7 @@ function onCropped(blob: Blob) {
       <NowPlayingStrip />
 
       <!-- Desktop Hamburger Menu (fixed top-left on >= 1024px) -->
-      <DesktopMenu @open-create-group="isCreateGroupOpen = true" />
+      <DesktopMenu @open-create-group="isCreateGroupOpen = true" @open-accounts="isAccountSwitcherOpen = true" />
 
       <!-- Left Column: Chats list (440px on Desktop) -->
       <aside class="chats-sidebar">
@@ -189,6 +203,7 @@ function onCropped(blob: Blob) {
           v-else-if="settingsStore.currentPane === 'profile'"
           @open-topup="economyStore.isTopupOpen = true"
           @open-promo="economyStore.isPromoOpen = true"
+          @open-accounts="isAccountSwitcherOpen = true"
           @edit-profile="settingsStore.setPane('edit-profile')"
         />
 
@@ -212,6 +227,7 @@ function onCropped(blob: Blob) {
     </div>
 
     <!-- Modals -->
+    <AccountSwitcherModal v-if="isAccountSwitcherOpen" @close="isAccountSwitcherOpen = false" />
     <LegalModal :doc-type="legalDocType" @close="legalDocType = null" />
     <TopupModal v-if="economyStore.isTopupOpen" @close="economyStore.isTopupOpen = false" />
     <PromoCodeModal v-if="economyStore.isPromoOpen" @close="economyStore.isPromoOpen = false" />
@@ -255,10 +271,14 @@ function onCropped(blob: Blob) {
   height: 100%;
   display: flex;
   flex-direction: column;
+  padding-top: 0;
+  box-sizing: border-box;
+  transition: padding-top 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 #loggedInScreen.has-player { padding-top: 36px; box-sizing: border-box; }
-.network-status { top: calc(var(--space-2) + var(--player-offset, 0px)); }
+.network-status { top: calc(var(--space-2) + var(--player-offset, 0px)); transition: top 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+@media (prefers-reduced-motion: reduce) { #loggedInScreen, .network-status { transition: none; } }
 #loggedInScreen.has-player { --player-offset: 36px; }
 
 .chats-sidebar {

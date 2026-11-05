@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch, onUnmounted } from 'vue'
+import { usePresenceStore } from '../../stores/presence'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
 import { useSettingsStore } from '../../stores/settings'
@@ -9,6 +10,7 @@ import SearchBar from './SearchBar.vue'
 defineProps<{ searchCount?: number; searchIndex?: number }>()
 const emit = defineEmits<{ (e: 'search-next'): void; (e: 'search-prev'): void }>()
 
+const presence = usePresenceStore()
 const chatStore = useChatStore()
 const groupsStore = useGroupsStore()
 const settingsStore = useSettingsStore()
@@ -25,6 +27,13 @@ const chatAvatar = computed(() => {
   return chatStore.activeChat?.avatar_url
 })
 
+watch(() => isGroup.value ? null : chatStore.activeChat?.id, (id, oldId) => {
+  if (oldId) presence.unwatchUser(oldId)
+  if (id) presence.watchUser(id)
+}, { immediate: true })
+onUnmounted(() => { if (!isGroup.value && chatStore.activeChat?.id) presence.unwatchUser(chatStore.activeChat.id) })
+const userStatus = computed(() => chatStore.activeChat ? presence.statusFor(chatStore.activeChat.id) : { text: '', online: false })
+
 const typingStatus = computed(() => {
   if (!isGroup.value && chatStore.activeChat) {
     if (chatStore.typingUsers.has(chatStore.activeChat.id)) {
@@ -35,7 +44,7 @@ const typingStatus = computed(() => {
 })
 
 const subtitle = computed(() => {
-  if (typingStatus.value) return typingStatus.value
+  if (typingStatus.value && userStatus.value.online) return typingStatus.value
   if (isGroup.value) {
     const count = groupsStore.groupMembers.length || groupsStore.activeGroup?.members_count
     return count == null ? 'Группа' : `${count} ${pluralizeMembers(count)}`
@@ -43,7 +52,7 @@ const subtitle = computed(() => {
   if (chatStore.activeChat?.id === FAV_ID) {
     return 'Бот'
   }
-  return 'в сети'
+  return userStatus.value.text
 })
 
 function pluralizeMembers(n: number) {
@@ -113,7 +122,7 @@ function toggleSearch() {
         <div class="chat-top-name">{{ chatTitle }}</div>
         <div
           class="chat-top-status"
-          :class="{ typing: !!typingStatus }"
+          :class="{ typing: !!typingStatus && userStatus.online, online: !isGroup && userStatus.online }"
         >
           <Transition name="status-change" mode="out-in"><span :key="subtitle">{{ subtitle }}</span></Transition>
         </div>
@@ -261,7 +270,7 @@ function toggleSearch() {
   line-height: 1.2;
 }
 
-.chat-top-status.typing {
+.chat-top-status.online, .chat-top-status.typing {
   color: #3b82f6;
 }
 

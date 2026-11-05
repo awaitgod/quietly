@@ -6,7 +6,7 @@ import { useAudioStore } from '../../stores/audio'
 import SolarIcon from '../common/SolarIcon.vue'
 import EmojiText from '../common/EmojiText.vue'
 
-const emit = defineEmits<{ (e: 'edit-profile'): void; (e: 'open-topup'): void; (e: 'open-promo'): void }>()
+const emit = defineEmits<{ (e: 'edit-profile'): void; (e: 'open-accounts'): void; (e: 'open-topup'): void; (e: 'open-promo'): void }>()
 const auth = useAuthStore()
 const audio = useAudioStore()
 const profile = computed(() => auth.profile)
@@ -26,6 +26,7 @@ async function copyUsername() {
         <div class="own-avatar"><img v-if="profile.avatar_url" :src="profile.avatar_url" alt="" /><span v-else>{{ profile.name.charAt(0).toUpperCase() }}</span></div>
         <h1><EmojiText :text="profile.name" /></h1>
       </div>
+      <button type="button" class="own-account-switch" @click="emit('open-accounts')"><SolarIcon name="users-group-rounded-linear" :size="20" /> Аккаунты <SolarIcon name="alt-arrow-right-linear" :size="18" /></button>
       <button type="button" class="own-primary" @click="emit('edit-profile')">Редактировать профиль</button>
       <div class="own-card">
         <div class="own-row">
@@ -57,6 +58,8 @@ async function copyUsername() {
 .own-avatar { width: 160px; height: 160px; border-radius: 50%; overflow: hidden; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 64px; font-weight: 700; }
 .own-avatar img { width: 100%; height: 100%; object-fit: cover; }
 h1 { margin: var(--space-4) 0 0; color: var(--text); font-size: var(--text-24); line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
+.own-account-switch { width:100%; margin-top:24px; padding:14px 16px; display:flex; align-items:center; gap:10px; border:0; border-radius:16px; background:var(--surface); color:var(--text); font:inherit; font-weight:600; cursor:pointer; }
+.own-account-switch svg:last-child { margin-left:auto; color:var(--muted); }
 .own-primary { width: 100%; min-height: 48px; margin-top: var(--space-6); border-radius: 999px; display: flex; align-items: center; justify-content: center; background: var(--text); color: var(--bg); font: inherit; font-weight: 600; cursor: pointer; }
 .own-card { margin-top: var(--space-4); padding: var(--space-4); border-radius: var(--radius-lg); background: var(--surface); }
 .own-row, .own-balance, .own-balance-content, .own-track { display: flex; align-items: center; gap: var(--space-3); }
