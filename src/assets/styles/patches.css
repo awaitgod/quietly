@@ -1,3 +1,14 @@
+/* Disable avatar zoom/scale on hover globally across the whole app */
+[class*="avatar"], [class*="avatar"] img, .avatar-circle, .chat-item-avatar, .chat-top-avatar, .msg-avatar {
+  transform: none !important;
+  transition: none !important;
+}
+[class*="avatar"]:hover, [class*="avatar"]:hover img,
+.chat-item:hover [class*="avatar"], .chat-item:hover [class*="avatar"] img,
+.chat-top-pill:hover [class*="avatar"], .chat-top-pill:hover [class*="avatar"] img {
+  transform: none !important;
+}
+
 /* === style_01_patch-css.css === */
 
 /* v5: gifts can't be selected */
@@ -582,3 +593,80 @@ html[data-theme="light"] .tk-cb.big{background:#111113;color:#fff}
 html[data-theme="light"] .tk-upload,html[data-theme="light"] .tk-pill,html[data-theme="light"] .tk-play{color:#111113}
 html[data-theme="light"] .tk-rg::-webkit-slider-runnable-track{background:linear-gradient(90deg,#111113 var(--p),#d0d0d5 var(--p))}
 html[data-theme="light"] .tk-rg::-webkit-slider-thumb{background:#111113}
+
+
+/* ===== LIGHT THEME REFINEMENTS ===== */
+html[data-theme="light"] .sec-card-btn {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+html[data-theme="light"] .sec-card-btn:hover {
+  background: #f4f4f7 !important;
+}
+html[data-theme="light"] .sec-btn-title {
+  color: #111114 !important;
+}
+html[data-theme="light"] .sec-btn-sub {
+  color: #6b7280 !important;
+}
+
+html[data-theme="light"] .account-row {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+html[data-theme="light"] .account-row:hover {
+  background: #f4f4f7 !important;
+}
+html[data-theme="light"] .account-add {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #111114 !important;
+}
+html[data-theme="light"] .account-add:hover {
+  background: #f4f4f7 !important;
+}
+html[data-theme="light"] .account-add-icon {
+  background: #f0f1f5 !important;
+  color: #111114 !important;
+}
+
+html[data-theme="light"] .switch-btn {
+  background: #e4e4e9 !important;
+  border-color: #d1d1d6 !important;
+}
+html[data-theme="light"] .switch-btn.active {
+  background: #0a84ff !important;
+  border-color: #0a84ff !important;
+}
+html[data-theme="light"] .switch-thumb {
+  background: #ffffff !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25) !important;
+}
+
+html[data-theme="light"] .gm-gift-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+html[data-theme="light"] .gm-gift-card:hover {
+  background: #f4f4f7 !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+html[data-theme="light"] .gm-price-pill {
+  background-color: #e4e4eb !important;
+  color: #111114 !important;
+}
+html[data-theme="light"] .gm-currency {
+  color: #6b7280 !important;
+}
+html[data-theme="light"] .gm-close-btn {
+  background: #f0f1f5 !important;
+  color: #111114 !important;
+}
+html[data-theme="light"] .gm-close-btn svg {
+  color: #6b7280 !important;
+}
+html[data-theme="light"] .gm-gift-name {
+  color: #111114 !important;
+}

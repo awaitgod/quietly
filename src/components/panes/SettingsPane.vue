@@ -7,6 +7,8 @@ import { useSettingsStore } from '../../stores/settings'
 import { useAudioStore } from '../../stores/audio'
 import { useEconomyStore } from '../../stores/economy'
 import SolarIcon from '../common/SolarIcon.vue'
+import KillerFeaturesPane from './KillerFeaturesPane.vue'
+import SecurityPane from './SecurityPane.vue'
 import type { AudioTrack } from '../../types'
 
 const emit = defineEmits<{
@@ -21,7 +23,7 @@ const settingsStore = useSettingsStore()
 const audioStore = useAudioStore()
 const economyStore = useEconomyStore()
 
-const currentSubView = ref<'main' | 'look' | 'sec' | 'devices' | 'about' | 'badges'>('main')
+const currentSubView = ref<'main' | 'look' | 'sec' | 'devices' | 'badges' | 'features'>('main')
 
 const profile = computed(() => authStore.profile)
 const userEmail = computed(() => authStore.user?.email || authStore.emailDraft || '')
@@ -103,17 +105,6 @@ function playTrack(track: AudioTrack) {
           <SolarIcon name="alt-arrow-right-linear" :size="20" color="#75757e" />
         </button>
 
-        <!-- About App -->
-        <button
-          type="button"
-          class="st-row"
-          @click="currentSubView = 'about'"
-        >
-          <SolarIcon name="info-circle-linear" :size="24" color="#8e8e96" />
-          <span class="st-row-label">О приложении</span>
-          <SolarIcon name="alt-arrow-right-linear" :size="20" color="#75757e" />
-        </button>
-
         <!-- Badges -->
         <button
           type="button"
@@ -124,6 +115,17 @@ function playTrack(track: AudioTrack) {
           <span class="st-row-label">Значки</span>
           <SolarIcon name="alt-arrow-right-linear" :size="20" color="#75757e" />
         </button>
+        <!-- Killer Features (Киллер фичи) -->
+        <button
+          type="button"
+          class="st-row"
+          @click="currentSubView = 'features'"
+        >
+          <SolarIcon name="magic-stick-3-linear" :size="24" color="#8e8e96" />
+          <span class="st-row-label">Киллер фичи</span>
+          <SolarIcon name="alt-arrow-right-linear" :size="20" color="#75757e" />
+        </button>
+
 
         <!-- Gifts (Подарки) -->
         <button
@@ -245,86 +247,12 @@ function playTrack(track: AudioTrack) {
       </div>
     </div>
 
-    <!-- SUBVIEW: ABOUT (О приложении) -->
-    <div v-else-if="currentSubView === 'about'" class="st-view">
-      <div class="sg-head">
-        <button
-          type="button"
-          class="back-circle"
-          aria-label="Назад"
-          @click="currentSubView = 'main'"
-        >
-          <SolarIcon name="alt-arrow-left-linear" :size="22" color="#ffffff" />
-        </button>
-        <h2 class="sg-title">О приложении</h2>
-      </div>
+      <!-- SUBVIEW: KILLER FEATURES (Киллер фичи) -->
+    <KillerFeaturesPane v-else-if="currentSubView === 'features'" @back="currentSubView = 'main'" />
 
-      <div class="sg-card">
-        <div class="sg-kv">
-          <span class="sg-label">Приложение</span>
-          <span class="sg-val">Quietly</span>
-        </div>
-        <div class="sg-kv">
-          <span class="sg-label">Версия</span>
-          <span class="sg-val">1.4 (Tauri v2 Desktop)</span>
-        </div>
-        <div class="sg-kv">
-          <span class="sg-label">Разработчик</span>
-          <span class="sg-val">Quietly Team</span>
-        </div>
-        <div class="sg-kv">
-          <span class="sg-label">Дата выпуска</span>
-          <span class="sg-val">1 октября 2026 г.</span>
-        </div>
-      </div>
-
-      <div class="sg-card sg-card-spaced">
-        <p class="sg-desc">
-          Приватный и безопасный мессенджер с поддержкой сквозного шифрования, локальной офлайн-базой SQLite + FTS5 и нативными эффектами Windows 11 Mica.
-        </p>
-      </div>
-
-      <div class="sg-links">
-        <button type="button" class="st-row" @click="emit('open-legal', 'terms')">
-          <span class="st-row-label">Пользовательское соглашение</span>
-          <SolarIcon name="alt-arrow-right-linear" :size="18" color="#75757e" />
-        </button>
-        <button type="button" class="st-row" @click="emit('open-legal', 'policy')">
-          <span class="st-row-label">Политика конфиденциальности</span>
-          <SolarIcon name="alt-arrow-right-linear" :size="18" color="#75757e" />
-        </button>
-      </div>
-    </div>
 
     <!-- SUBVIEW: SECURITY (Безопасность) -->
-    <div v-else-if="currentSubView === 'sec'" class="st-view">
-      <div class="sg-head">
-        <button
-          type="button"
-          class="back-circle"
-          aria-label="Назад"
-          @click="currentSubView = 'main'"
-        >
-          <SolarIcon name="alt-arrow-left-linear" :size="22" color="#ffffff" />
-        </button>
-        <h2 class="sg-title">Безопасность</h2>
-      </div>
-
-      <div class="sg-card">
-        <div class="sg-kv">
-          <span class="sg-label">Локальное шифрование</span>
-          <span class="sg-val" style="color: #4ade80;">Включено (SQLCipher)</span>
-        </div>
-        <div class="sg-kv">
-          <span class="sg-label">Хранилище сессий</span>
-          <span class="sg-val">Windows Credential DPAPI</span>
-        </div>
-        <div class="sg-kv">
-          <span class="sg-label">Транспорт</span>
-          <span class="sg-val">TLS + WebSocket Tokio</span>
-        </div>
-      </div>
-    </div>
+    <SecurityPane v-else-if="currentSubView === 'sec'" @back="currentSubView = 'main'" />
 
     <!-- SUBVIEW: DEVICES (Устройства) -->
     <div v-else-if="currentSubView === 'devices'" class="st-view">

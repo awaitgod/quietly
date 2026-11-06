@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import EmojiText from '../common/EmojiText.vue'
 
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import type { StickerPack } from '../../types'
 import { EMOJI_CATEGORIES, OFFICIAL_PACKS, tablesApi } from '../../services/supabase'
@@ -42,7 +42,8 @@ function toggleOfficial(id: string) { addedOfficial.value = addedOfficial.value.
 const visiblePacks = computed(() => [...OFFICIAL_PACKS.filter(p => addedOfficial.value.includes(p.id)).map(p => ({ ...p, key: p.id })), ...packs.value.map(p => ({ ...p, key: `user:${p.id}` }))])
 const currentPack = computed(() => visiblePacks.value.find(p => p.key === activePack.value))
 readAdded()
-onMounted(loadPacks)
+onMounted(() => { void loadPacks(); window.addEventListener('quietly-sticker-packs-changed', readAdded) })
+onUnmounted(() => window.removeEventListener('quietly-sticker-packs-changed', readAdded))
 
 function handleEmojiClick(e: string) {
   emit('select-emoji', e)

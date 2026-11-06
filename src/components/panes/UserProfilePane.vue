@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settings'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
 import { useAuthStore } from '../../stores/auth'
+import { useContactsStore } from '../../stores/contacts'
 import GiftGallery from '../common/GiftGallery.vue'
 import { FAV_ID } from '../../services/supabase'
 import SolarIcon from '../common/SolarIcon.vue'
@@ -16,6 +17,9 @@ const settings = useSettingsStore()
 const chat = useChatStore()
 const groups = useGroupsStore()
 const auth = useAuthStore()
+const contacts = useContactsStore()
+const blockBusy = ref(false)
+const blockError = ref('')
 const emit = defineEmits<{ (e: 'send-gift', recipient: { id: string; name: string }): void }>()
 const copied = ref(false)
 const user = computed(() => settings.viewedUser)
@@ -27,6 +31,23 @@ const favorite = computed(() => user.value?.id === FAV_ID)
 const title = computed(() => user.value?.name || group.value?.name || '')
 const avatar = computed(() => user.value?.avatar_url || group.value?.avatar_url)
 const bio = computed(() => user.value?.bio || user.value?.description || user.value?.about)
+
+function handleAvatarClick() {
+  if (avatar.value) {
+    settings.openImagePreview(avatar.value, title.value)
+  }
+}
+
+async function toggleBlocked() {
+  if (!user.value || blockBusy.value) return
+  blockBusy.value = true
+  blockError.value = ''
+  try {
+    if (contacts.blockedIds.has(user.value.id)) await contacts.unblockUser(user.value.id)
+    else await contacts.blockUser(user.value.id)
+  } catch { blockError.value = 'Не удалось изменить чёрный список. Попробуйте ещё раз.' }
+  finally { blockBusy.value = false }
+}
 function back() { settings.setPane('dm') }
 async function write() {
   if (user.value && chat.activeChat?.id !== user.value.id) {
@@ -46,13 +67,21 @@ async function copyUsername() {
   <section v-if="user || group" class="profile-info" aria-label="Информация о чате">
     <div class="profile-content">
       <button type="button" class="back-button" aria-label="Вернуться к чату" @click="back">
-        <SolarIcon name="alt-arrow-left-linear" :size="22" />
+        <SolarIcon name="alt-arrow-left-linear" :size="20" />
       </button>
       <div class="profile-hero">
-        <div class="profile-avatar" :class="{ 'profile-favorite': favorite, 'profile-group': group && !avatar }">
+        <div
+          class="profile-avatar"
+          :class="{ 'profile-favorite': favorite, 'profile-group': group && !avatar, 'has-photo': !!avatar }"
+          role="button"
+          tabindex="0"
+          :aria-label="avatar ? 'Открыть фотографию профиля' : undefined"
+          @click="handleAvatarClick"
+          @keydown.enter="handleAvatarClick"
+        >
           <img v-if="avatar" :src="avatar" alt="" />
-          <SolarIcon v-else-if="favorite" name="bookmark-bold" :size="72" />
-          <SolarIcon v-else-if="group" name="users-group-rounded-bold" :size="72" />
+          <SolarIcon v-else-if="favorite" name="bookmark-bold" :size="48" />
+          <SolarIcon v-else-if="group" name="users-group-rounded-bold" :size="48" />
           <span v-else>{{ title.charAt(0).toUpperCase() }}</span>
         </div>
         <h1><EmojiText :text="title" /></h1>
@@ -60,8 +89,8 @@ async function copyUsername() {
         <p v-else-if="group" class="profile-subtitle">Участников: {{ groups.groupMembers.length }}</p>
       </div>
       <div class="profile-actions">
-        <button type="button" class="write-button" @click="write"><SolarIcon name="chat-round-dots-linear" :size="20" /> Написать</button>
-        <button v-if="user && !favorite && user.id !== auth.user?.id" type="button" class="back-button gift-action" aria-label="Подарить подарок" @click="emit('send-gift', { id: user.id, name: title })"><SolarIcon name="gift-linear" :size="22" /></button>
+        <button type="button" class="write-button" @click="write"><SolarIcon name="chat-round-dots-linear" :size="18" /> Написать</button>
+        <button v-if="user && !favorite && user.id !== auth.user?.id" type="button" class="back-button gift-action" aria-label="Подарить подарок" @click="emit('send-gift', { id: user.id, name: title })"><SolarIcon name="gift-linear" :size="20" /></button>
         <GroupManager v-if="group" :group="group" />
       </div>
       <div v-if="favorite || user?.username || bio" class="profile-info-card">
@@ -71,45 +100,56 @@ async function copyUsername() {
         </div>
         <div v-if="!favorite && user?.username" class="profile-username-row">
           <div><div class="profile-label">Юзернейм</div><div class="profile-username">@{{ user.username }}</div></div>
-          <button type="button" class="copy-button" aria-label="Скопировать юзернейм" @click="copyUsername"><SolarIcon name="copy-linear" :size="20" /></button>
+          <button type="button" class="copy-button" aria-label="Скопировать юзернейм" @click="copyUsername"><SolarIcon name="copy-linear" :size="18" /></button>
         </div>
         <p v-if="copied" class="copy-status" role="status">Юзернейм скопирован</p>
         <div v-if="!favorite && bio" class="profile-info-row"><div class="profile-label">О себе</div><p><EmojiText :text="bio" /></p></div>
       </div>
+      <button v-if="user && !favorite && user.id !== auth.user?.id" type="button" class="block-user" :disabled="blockBusy" @click="toggleBlocked">{{ contacts.blockedIds.has(user.id) ? 'Разблокировать пользователя' : 'Заблокировать пользователя' }}</button>
+      <p v-if="blockError" class="block-error" role="alert">{{ blockError }}</p>
       <GiftGallery v-if="user && !favorite" :user-id="user.id" />
     </div>
   </section>
 </template>
 
 <style scoped>
-.profile-info { width: 100%; height: 100%; overflow-y: auto; padding: var(--space-8) var(--space-6); color: var(--text); }
-.profile-content { position: relative; width: min(100%, 440px); margin-inline: auto; min-width: 0; }
+.block-user { margin-top:14px; padding:8px 0; border:0; background:transparent; color:#e2596a; font:inherit; font-size:var(--text-13); cursor:pointer; }
+.block-user:disabled { opacity:.5; cursor:default; }
+.block-error { color:#e2596a; font-size:var(--text-13); }
+.profile-info { width: 100%; height: 100%; overflow-y: auto; padding: var(--space-6) var(--space-4); color: var(--text); }
+.profile-content { position: relative; width: min(100%, 380px); margin-inline: auto; min-width: 0; }
 .back-button, .copy-button { border: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-.back-button { position: absolute; left: 0; top: 0; width: 44px; height: 44px; border-radius: 50%; background: var(--surface); color: var(--text); }
+.back-button { position: absolute; left: 0; top: 0; width: 36px; height: 36px; border-radius: 50%; background: var(--surface); color: var(--text); transition: opacity 0.15s; }
+.back-button:hover { opacity: 0.85; }
 .profile-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
-.profile-avatar { width: 160px; height: 160px; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--surface); font-size: 64px; font-weight: 700; }
+.profile-avatar { width: 104px; height: 104px; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--surface); font-size: 44px; font-weight: 700; }
+.profile-avatar.has-photo { cursor: pointer; }
 .profile-avatar.profile-favorite { background: #28a8ea; color: white; }
 .profile-avatar.profile-group { background: #5c62d6; color: white; }
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
-h1 { margin: var(--space-4) 0 0; color: var(--text); font-size: var(--text-24); line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
+h1 { margin: 12px 0 0; color: var(--text); font-size: 20px; font-weight: 700; line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
 .profile-subtitle.online { color: #3b82f6; }
-.profile-subtitle { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-14); }
+.profile-subtitle { margin: 3px 0 0; color: var(--muted); font-size: var(--text-13); }
 .gift-action { position: static; flex: none; }
-.profile-actions { display: flex; gap: var(--space-2); align-items: flex-end; }
-.write-button { flex: 1; min-width: 0; width: 100%; min-height: 48px; margin-top: var(--space-6); border: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: var(--space-2); background: var(--text); color: var(--bg); font: inherit; font-weight: 600; cursor: pointer; }
-.profile-info-card { width: 100%; margin-top: var(--space-4); padding: var(--space-4); border-radius: var(--radius-lg); background: var(--surface); }
+.profile-actions { display: flex; gap: var(--space-2); align-items: flex-end; margin-top: 14px; }
+.write-button { flex: 1; min-width: 0; width: 100%; min-height: 42px; border: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: var(--space-2); background: var(--text); color: var(--bg); font: inherit; font-size: var(--text-14); font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+.write-button:hover { opacity: 0.9; }
+.profile-info-card { width: 100%; margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: var(--surface); }
 .profile-info-row { display: block; text-align: left; }
-.profile-info-row + .profile-info-row, .profile-username-row + .profile-info-row { margin-top: var(--space-4); }
-.profile-label { color: var(--muted); font-size: var(--text-12); font-weight: 600; }
-.profile-info-row p { margin: var(--space-1) 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+.profile-info-row + .profile-info-row, .profile-username-row + .profile-info-row { margin-top: 12px; }
+.profile-label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.profile-info-row p { margin: 4px 0 0; font-size: var(--text-13); line-height: 1.45; overflow-wrap: anywhere; color: var(--text); }
 .profile-username-row { width: 100%; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .profile-username-row > div { flex: 1; min-width: 0; }
-.profile-username { color: #63aaff; overflow-wrap: anywhere; }
-.copy-button { width: 40px; height: 40px; flex: none; border-radius: 50%; background: transparent; color: #63aaff; }
-.copy-status { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-12); }
-.profile-gifts { margin-top: var(--space-6); }.profile-gifts h2 { font-size: var(--text-16); margin: 0 0 var(--space-3); }.profile-gifts h2 span { color: var(--muted); }
-.profile-gift-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(120px,1fr)); gap: var(--space-3); }.profile-gift-card { min-height: 120px; padding: var(--space-4); border-radius: var(--radius-lg); background: var(--surface); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-2); font-size:32px; }.profile-gift-card small { font-size:var(--text-12); color:var(--muted); text-align:center; }
-@media (max-width: 480px) { .profile-info { padding: var(--space-4); }.profile-avatar { width: 128px; height: 128px; } }
-@media (max-width: 240px) { .profile-hero { padding-top: 56px; } }
+.profile-username { color: #63aaff; font-size: var(--text-14); overflow-wrap: anywhere; margin-top: 2px; }
+.copy-button { width: 34px; height: 34px; flex: none; border-radius: 50%; background: transparent; color: #63aaff; }
+.copy-status { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.profile-gifts { margin-top: var(--space-6); }.profile-gifts h2 { font-size: var(--text-15); margin: 0 0 var(--space-3); }.profile-gifts h2 span { color: var(--muted); }
+.profile-gift-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(110px,1fr)); gap: var(--space-3); }.profile-gift-card { min-height: 110px; padding: 12px; border-radius: 14px; background: var(--surface); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-2); font-size:28px; }.profile-gift-card small { font-size:11px; color:var(--muted); text-align:center; }
+@media (max-width: 480px) { .block-user { margin-top:14px; padding:8px 0; border:0; background:transparent; color:#e2596a; font:inherit; font-size:var(--text-13); cursor:pointer; }
+.block-user:disabled { opacity:.5; cursor:default; }
+.block-error { color:#e2596a; font-size:var(--text-13); }
+.profile-info { padding: var(--space-4); }.profile-avatar { width: 92px; height: 92px; font-size: 38px; } }
+@media (max-width: 240px) { .profile-hero { padding-top: 48px; } }
 :global(html[data-theme="light"]) .profile-username, :global(html[data-theme="light"]) .copy-button { color: #145bb5; }
 </style>

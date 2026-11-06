@@ -43,6 +43,7 @@ import AudioPlayerModal from './components/modals/AudioPlayerModal.vue'
 import TrackUploadModal from './components/modals/TrackUploadModal.vue'
 import GiftsModal from './components/modals/GiftsModal.vue'
 import AccountSwitcherModal from './components/modals/AccountSwitcherModal.vue'
+import ImagePreviewModal from './components/modals/ImagePreviewModal.vue'
 import SolarIcon from './components/common/SolarIcon.vue'
 
 const authStore = useAuthStore()
@@ -246,6 +247,7 @@ function onCropped(blob: Blob) {
     <GroupCreateModal v-if="isCreateGroupOpen" @close="isCreateGroupOpen = false" />
     <AudioPlayerModal />
     <TrackUploadModal v-if="audioStore.isUploadModalOpen" @close="audioStore.isUploadModalOpen = false" />
+    <ImagePreviewModal />
 
     <!-- Qcoin Toast Notification -->
     <div v-if="economyStore.coinToast.visible" class="gift-toast show">

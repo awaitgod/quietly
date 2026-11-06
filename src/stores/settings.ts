@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { UserProfile } from '../types';
 export type NavPane = 'dm' | 'search' | 'contacts' | 'settings' | 'profile' | 'user' | 'edit-profile';
-export type SettingsView = 'main' | 'security' | 'devices' | 'look' | 'badges' | 'admin' | 'about';
+export type SettingsView = 'main' | 'security' | 'devices' | 'look' | 'badges' | 'admin' | 'about' | 'features';
 export const useSettingsStore = defineStore('settings', () => {
     const currentPane = ref<NavPane>('dm');
     const settingsSubView = ref<SettingsView>('main');
@@ -10,6 +10,25 @@ export const useSettingsStore = defineStore('settings', () => {
     const theme = ref<'dark' | 'light'>('dark');
     const viewedUser = ref<UserProfile | null>(null);
     const doubleTapEmoji = ref('❤️');
+
+    // Killer Feature: Шифрование сообщений по секретному ключу
+    const encryptionEnabled = ref(false);
+    const encryptionKey = ref('');
+
+    // Предпросмотрщик изображений (аватарки, фото и т.д.)
+    const previewImageSrc = ref<string | null>(null);
+    const previewImageTitle = ref<string>('');
+
+    function openImagePreview(src: string, title: string = '') {
+        previewImageSrc.value = src;
+        previewImageTitle.value = title;
+    }
+
+    function closeImagePreview() {
+        previewImageSrc.value = null;
+        previewImageTitle.value = '';
+    }
+
     function initTheme() {
         const saved = localStorage.getItem('quietly_theme') as 'dark' | 'light' | null;
         if (saved === 'light' || saved === 'dark') {
@@ -23,6 +42,25 @@ export const useSettingsStore = defineStore('settings', () => {
         if (savedEmoji !== null) {
             doubleTapEmoji.value = savedEmoji;
         }
+
+        const savedEncEnabled = localStorage.getItem('quietly_encryption_enabled');
+        if (savedEncEnabled !== null) {
+            encryptionEnabled.value = savedEncEnabled === 'true';
+        }
+        const savedEncKey = localStorage.getItem('quietly_encryption_key');
+        if (savedEncKey !== null) {
+            encryptionKey.value = savedEncKey;
+        }
+    }
+
+    function setEncryptionEnabled(enabled: boolean) {
+        encryptionEnabled.value = enabled;
+        localStorage.setItem('quietly_encryption_enabled', String(enabled));
+    }
+
+    function setEncryptionKey(key: string) {
+        encryptionKey.value = key;
+        localStorage.setItem('quietly_encryption_key', key);
     }
     function setDoubleTapEmoji(emoji: string | null) {
         doubleTapEmoji.value = emoji || '';
@@ -61,6 +99,12 @@ export const useSettingsStore = defineStore('settings', () => {
         theme,
         viewedUser,
         doubleTapEmoji,
+        encryptionEnabled,
+        encryptionKey,
+        previewImageSrc,
+        previewImageTitle,
+        openImagePreview,
+        closeImagePreview,
         initTheme,
         toggleTheme,
         setTheme,
@@ -68,5 +112,7 @@ export const useSettingsStore = defineStore('settings', () => {
         openUserProfile,
         openGroupInfo,
         setDoubleTapEmoji,
+        setEncryptionEnabled,
+        setEncryptionKey,
     };
 });

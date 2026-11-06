@@ -2,14 +2,19 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
+import { useSettingsStore } from '../../stores/settings'
+import { encryptText } from '../../utils/encryption'
 import SolarIcon from '../common/SolarIcon.vue'
 import StickerPanel from './StickerPanel.vue'
 import EmojiText from '../common/EmojiText.vue'
 import EmojiEditor from './EmojiEditor.vue'
-import { tablesApi } from '../../services/supabase'
+import { tablesApi, storageApi } from '../../services/supabase'
+import { useAuthStore } from '../../stores/auth'
+import { CONTENT_PREFIX } from '../../types'
 
 const chatStore = useChatStore()
 const groupsStore = useGroupsStore()
+const settingsStore = useSettingsStore()
 
 const text = ref('')
 const savingEdit = ref(false)
@@ -17,7 +22,81 @@ const editError = ref('')
 const savedDraft = ref('')
 const isStickerPanelOpen = ref(false)
 const editorRef = ref<InstanceType<typeof EmojiEditor> | null>(null)
+const authStore = useAuthStore()
 const isSendingText = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const isUploadingFile = ref(false)
+const uploadProgressText = ref('')
+
+function triggerFileSelect() {
+  fileInputRef.value?.click()
+}
+
+async function handleFileSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  input.value = ''
+
+  if (!authStore.user?.id) {
+    alert('Необходимо авторизоваться')
+    return
+  }
+
+  const isImg = file.type.startsWith('image/')
+  const isAud = file.type.startsWith('audio/') || /.(mp3|wav|ogg|m4a|flac)$/i.test(file.name)
+
+  if (!isImg && !isAud) {
+    alert('Пожалуйста, выберите изображение или аудиофайл')
+    return
+  }
+
+  isUploadingFile.value = true
+  uploadProgressText.value = isImg ? 'Отправка фото...' : 'Отправка музыки...'
+
+  try {
+    const ext = file.name.split('.').pop() || (isImg ? 'jpg' : 'mp3')
+    if (isImg) {
+      const res = await storageApi.chat.uploadImage(authStore.user.id, file, ext, file.type || 'image/jpeg')
+      if (res.error) throw res.error
+      const payload = {
+        url: res.data.publicUrl,
+        name: file.name,
+        size: file.size,
+      }
+      const msgContent = `${CONTENT_PREFIX.IMAGE}${JSON.stringify(payload)}`
+      if (isGroup.value) {
+        await groupsStore.sendGroupMessage(msgContent, chatStore.replyContext?.id)
+      } else {
+        await chatStore.sendMessage(msgContent, chatStore.replyContext?.id)
+      }
+      chatStore.replyContext = null
+    } else {
+      const res = await storageApi.chat.uploadAudio(authStore.user.id, file, ext, file.type || 'audio/mpeg')
+      if (res.error) throw res.error
+      const title = file.name.replace(/.[^.]+$/, '').slice(0, 50) || 'Аудиозапись'
+      const payload = {
+        url: res.data.publicUrl,
+        title,
+        artist: authStore.profile?.name || 'Вы',
+        size: file.size,
+      }
+      const msgContent = `${CONTENT_PREFIX.AUDIO}${JSON.stringify(payload)}`
+      if (isGroup.value) {
+        await groupsStore.sendGroupMessage(msgContent, chatStore.replyContext?.id)
+      } else {
+        await chatStore.sendMessage(msgContent, chatStore.replyContext?.id)
+      }
+      chatStore.replyContext = null
+    }
+  } catch (err: any) {
+    console.error('File upload failed:', err)
+    alert('Ошибка при отправке файла: ' + (err.message || 'попробуйте ещё раз'))
+  } finally {
+    isUploadingFile.value = false
+    uploadProgressText.value = ''
+  }
+}
 const flyingBubble = ref<{ text: string; top: number; right: number } | null>(null)
 
 const isGroup = computed(() => !!groupsStore.activeGroup)
@@ -62,11 +141,20 @@ async function handleSend() {
     }, 200)
   }
 
+  let finalContent = content
+  if (settingsStore.encryptionEnabled && settingsStore.encryptionKey.trim()) {
+    try {
+      finalContent = await encryptText(content, settingsStore.encryptionKey)
+    } catch (e) {
+      console.error('[Encryption] Failed to encrypt message:', e)
+    }
+  }
+
   if (isGroup.value) {
-    groupsStore.sendGroupMessage(content, chatStore.replyContext?.id)
+    groupsStore.sendGroupMessage(finalContent, chatStore.replyContext?.id)
     chatStore.replyContext = null
   } else {
-    chatStore.sendMessage(content, chatStore.replyContext?.id)
+    chatStore.sendMessage(finalContent, chatStore.replyContext?.id)
     chatStore.replyContext = null
   }
 
@@ -119,6 +207,28 @@ function cancelContext() {
 
     <div class="chat-input-row">
       <div class="chat-pill-box">
+        <!-- Hidden file input for images & audio -->
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept="image/*,audio/*"
+          style="display: none;"
+          @change="handleFileSelected"
+        />
+
+        <!-- Attachment / Paperclip Button -->
+        <button
+          type="button"
+          class="chat-attach-btn"
+          :disabled="isUploadingFile"
+          aria-label="Прикрепить изображение или музыку"
+          title="Отправить фото или аудио"
+          @click="triggerFileSelect"
+        >
+          <SolarIcon v-if="!isUploadingFile" name="paperclip-linear" :size="22" />
+          <span v-else class="upload-spinner"></span>
+        </button>
+
         <div class="emoji-anchor">
       <button
         type="button"
@@ -137,12 +247,14 @@ function cancelContext() {
         <button
           type="button"
           class="chat-send-btn"
-          :class="{ active: canSend }"
+          :class="{ active: canSend, encrypted: settingsStore.encryptionEnabled && settingsStore.encryptionKey.trim() }"
           :disabled="!canSend || savingEdit"
           :aria-label="chatStore.editContext ? 'Сохранить изменение' : 'Отправить сообщение'"
+          :title="settingsStore.encryptionEnabled && settingsStore.encryptionKey.trim() ? 'Шифрование ключом активно' : undefined"
           @click="handleSend"
         >
           <SolarIcon v-if="chatStore.editContext" name="check-linear" :size="20" />
+          <SolarIcon v-else-if="settingsStore.encryptionEnabled && settingsStore.encryptionKey.trim()" name="lock-keyhole-bold" :size="17" />
           <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="19" x2="12" y2="5"></line>
             <polyline points="5 12 12 5 19 12"></polyline>
@@ -170,10 +282,23 @@ function cancelContext() {
 </template>
 
 <style scoped>
-:global(html[data-theme="light"]) .chat-emoji-btn:hover, :global(html[data-theme="light"]) .chat-emoji-btn.on { color: #222; }
+:global(html[data-theme="light"]) .chat-emoji-btn,
+:global(html[data-theme="light"]) .chat-attach-btn {
+  color: #64748b;
+}
+:global(html[data-theme="light"]) .chat-emoji-btn:hover,
+:global(html[data-theme="light"]) .chat-emoji-btn.on,
+:global(html[data-theme="light"]) .chat-attach-btn:hover {
+  color: #0f172a !important;
+  background-color: rgba(15, 23, 42, 0.08) !important;
+}
 :global(html[data-theme="light"]) .chat-send-btn { background: #e1e1e6; color: #686872; }
 :global(html[data-theme="light"]) .chat-send-btn.active { background: #202026; color: #fff; }
-:global(html[data-theme="light"]) .chat-send-btn.active:hover { background: #33333b; }
+:global(html[data-theme="light"]) .chat-send-btn.active.encrypted {
+  background-color: #0a84ff !important;
+  color: #ffffff !important;
+}
+.chat-send-btn.active:hover { background: #33333b; }
 
 .chat-input-wrapper {
   position: relative;
@@ -244,6 +369,42 @@ function cancelContext() {
 
 :global(#loggedInScreen.chat-open) .chat-input-row { padding: 0; background: transparent; }
 .emoji-anchor { position: relative; flex: none; }
+.chat-attach-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #8e8e93;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.15s, transform 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.chat-attach-btn:hover {
+  color: #ffffff;
+}
+.chat-attach-btn:active {
+  transform: scale(0.92);
+}
+:global(html[data-theme="light"]) .chat-attach-btn:hover {
+  color: #222;
+}
+.upload-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #0a84ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .chat-emoji-btn {
   width: 36px;
   height: 36px;

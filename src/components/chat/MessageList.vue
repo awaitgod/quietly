@@ -25,6 +25,7 @@ const emit = defineEmits<{
   (e: 'select', message: Message): void
   (e: 'double-tap', message: Message): void
   (e: 'reaction', payload: { message: Message; emoji: string }): void
+  (e: 'open-sticker-pack', sticker: string): void
 }>()
 
 const chatStore = useChatStore()
@@ -231,6 +232,7 @@ onMounted(() => {
           @double-tap="emit('double-tap', $event)"
           @reaction="emit('reaction', $event)"
           @jump-to-reply="scrollToMessage"
+          @open-sticker-pack="emit('open-sticker-pack', $event)"
         />
       </div>
     </div>

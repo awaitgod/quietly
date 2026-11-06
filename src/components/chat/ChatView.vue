@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { stickerForPartner, stickerUrl } from '../../utils/stickers'
+import { OFFICIAL_PACKS, tablesApi } from '../../services/supabase'
+import { useAuthStore } from '../../stores/auth'
+import StickerPackPreview from '../modals/StickerPackPreview.vue'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
 import { useSettingsStore } from '../../stores/settings'
@@ -44,6 +47,53 @@ function moveSearch(step: number) {
   if (!matches.value.length) return
   matchIndex.value = (matchIndex.value + step + matches.value.length) % matches.value.length
   messageListRef.value?.scrollToMessage(matches.value[matchIndex.value].id)
+}
+const authStore = useAuthStore()
+const stickerPack = ref<{ id: string; title: string; items: string[]; official: boolean } | null>(null)
+const addedStickerPacks = ref<string[]>([])
+const stickerPackError = ref('')
+let stickerRequest = 0
+function stickerPath(value: string) {
+  try { return decodeURIComponent(new URL(value, window.location.origin).pathname).replace(/^\/+/, '') }
+  catch { return value.replace(/^\/+/, '') }
+}
+async function openStickerPack(sticker: string) {
+  const request = ++stickerRequest
+  stickerPackError.value = ''
+  stickerPack.value = null
+  const path = stickerPath(sticker)
+  const official = OFFICIAL_PACKS.find(pack => pack.items.some(item => path === stickerPath(item) || path.endsWith('/' + item)))
+  if (official) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`chat_packs_added:${authStore.user?.id || 'guest'}`) || '["welcome"]')
+      addedStickerPacks.value = Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : ['welcome']
+    } catch { addedStickerPacks.value = ['welcome'] }
+    stickerPack.value = { ...official, official: true }
+    return
+  }
+  try {
+    const { data, error } = await tablesApi.stickerPacks.findPackByStickerUrl(sticker)
+    if (error) throw error
+    if (request !== stickerRequest) return
+    const pack = data?.find(item => Array.isArray(item.items))
+    if (!pack) { stickerPackError.value = 'Не удалось найти набор этого стикера.'; return }
+    stickerPack.value = { id: String(pack.id), title: pack.title, items: pack.items, official: false }
+  } catch { if (request === stickerRequest) stickerPackError.value = 'Не удалось загрузить набор стикеров. Попробуйте ещё раз.' }
+}
+function toggleStickerPack() {
+  if (!stickerPack.value?.official) return
+  const id = stickerPack.value.id
+  const next = addedStickerPacks.value.includes(id) ? addedStickerPacks.value.filter(value => value !== id) : [...addedStickerPacks.value, id]
+  try {
+    localStorage.setItem(`chat_packs_added:${authStore.user?.id || 'guest'}`, JSON.stringify(next))
+    addedStickerPacks.value = next
+    window.dispatchEvent(new Event('quietly-sticker-packs-changed'))
+  } catch { stickerPackError.value = 'Не удалось сохранить набор стикеров.' }
+}
+function sendStickerFromPack(sticker: string) {
+  if (isGroup.value) void groupsStore.sendGroupMessage(`sticker::${sticker}`)
+  else void chatStore.sendMessage(`sticker::${sticker}`)
+  stickerPack.value = null
 }
 const suggestionAvailable = ref(true)
 const currentConversationId = computed(() => String(groupsStore.activeGroup?.id || chatStore.activeChat?.id || ''))
@@ -141,8 +191,11 @@ function scrollToMessageId(id: string | number) {
       @select="onSelect"
       @double-tap="onDoubleTap"
       @reaction="onReaction"
+      @open-sticker-pack="openStickerPack"
     />
 
+    <div v-if="stickerPackError" class="reaction-notice" role="alert" @click="stickerPackError = ''">{{ stickerPackError }}</div>
+    <StickerPackPreview v-if="stickerPack" :pack="stickerPack" :official="stickerPack.official" :added="addedStickerPacks.includes(stickerPack.id)" @close="stickerPack = null" @toggle="toggleStickerPack" @select="sendStickerFromPack" />
     <!-- Chat Input -->
     <div ref="composerRef" class="composer-overlay"><ChatInput /></div>
   </div>

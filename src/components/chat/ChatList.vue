@@ -7,6 +7,7 @@ import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
 import { useSettingsStore } from '../../stores/settings'
 import { FAV_ID } from '../../services/supabase'
+import { decryptText, isEncryptedMessage } from '../../utils/encryption'
 import SolarIcon from '../common/SolarIcon.vue'
 
 const authStore = useAuthStore()
@@ -25,6 +26,29 @@ watch(initialLoadComplete, async (ready) => {
   await nextTick()
   requestAnimationFrame(() => { if (generation === loadGeneration) animateReordering.value = true })
 }, { immediate: true, flush: 'post' })
+
+const decryptedPreviews = ref<Record<string, string>>({})
+
+watch(
+  [() => combinedChatList.value, () => settingsStore.encryptionKey],
+  async ([chats, key]) => {
+    for (const chat of chats) {
+      const msg = chat.lastMessage
+      if (msg && isEncryptedMessage(msg.content)) {
+        const res = await decryptText(msg.content, key)
+        decryptedPreviews.value[msg.content] = res.status === 'decrypted' ? res.text : 'Текст зашифрован'
+      }
+    }
+  },
+  { immediate: true, deep: true }
+)
+
+function getLastMessagePreview(content: string): string {
+  if (isEncryptedMessage(content)) {
+    return decryptedPreviews.value[content] || 'Текст зашифрован'
+  }
+  return content
+}
 
 const totalUnread = computed(() => {
   return chatStore.totalUnreadCount + groupsStore.totalGroupUnread
@@ -180,7 +204,7 @@ function toggleDesktopMenu() {
                   <span v-if="isMessageOutgoing(chat.lastMessage)" class="preview-prefix">Вы: </span>
                   <span v-if="chat.lastMessage.content.startsWith('sticker::')">Стикер</span>
                   <span v-else-if="chat.lastMessage.content.startsWith('svc::')">Служебное уведомление</span>
-                  <span v-else><EmojiText :text="chat.lastMessage.content" /></span>
+                  <span v-else><EmojiText :text="getLastMessagePreview(chat.lastMessage.content)" /></span>
                 </template>
                 <template v-else-if="chat.id === FAV_ID">
                   Ваши личные заметки

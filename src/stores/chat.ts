@@ -6,6 +6,7 @@ import { tauriSaveMessage, tauriGetMessages, tauriNotify } from '../services/tau
 import type { Message, UserProfile } from '../types';
 import { useAuthStore } from './auth';
 import { usePresenceStore } from './presence';
+import { useContactsStore } from './contacts';
 export interface ConversationItem {
     id: string;
     profile: UserProfile;
@@ -222,6 +223,7 @@ export const useChatStore = defineStore('chat', () => {
         const myId = authStore.user?.id;
         if (!myId)
             return;
+        if (newMsg.sender_id !== myId && useContactsStore().blockedIds.has(newMsg.sender_id)) return;
         const partnerId = newMsg.sender_id === myId ? newMsg.receiver_id : newMsg.sender_id;
         if (!partnerId)
             return;

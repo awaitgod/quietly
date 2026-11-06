@@ -35,6 +35,31 @@ export const storageApi = {
         },
         getPublicUrl: (path: string) => supabase.storage.from('stickers').getPublicUrl(path).data.publicUrl,
     },
+    chat: {
+        uploadImage: async (userId: string, file: Blob | File, ext = 'jpg', mimeType = 'image/jpeg') => {
+            const rand = Math.random().toString(36).slice(2, 8);
+            const path = `${userId}/${Date.now()}_${rand}.${ext}`;
+            const res = await supabase.storage.from('avatars').upload(path, file, {
+                contentType: mimeType,
+                cacheControl: '31536000',
+            });
+            if (res.error) return res;
+            const publicUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+            return { data: { publicUrl, path }, error: null };
+        },
+        uploadAudio: async (userId: string, file: Blob | File, ext = 'mp3', mimeType = 'audio/mpeg') => {
+            const rand = Math.random().toString(36).slice(2, 8);
+            const trackId = `${Date.now()}_${rand}`;
+            const path = `${userId}/${trackId}.${ext}`;
+            const res = await supabase.storage.from('tracks').upload(path, file, {
+                contentType: mimeType,
+                cacheControl: '31536000',
+            });
+            if (res.error) return res;
+            const publicUrl = supabase.storage.from('tracks').getPublicUrl(path).data.publicUrl;
+            return { data: { publicUrl, path }, error: null };
+        },
+    },
     tracks: {
         uploadAudio: (userId: string, trackId: string, audioBlob: Blob, ext = 'mp3', mimeType = 'audio/mpeg') => {
             const path = `${userId}/${trackId}.${ext}`;

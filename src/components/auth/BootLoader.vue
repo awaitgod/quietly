@@ -17,13 +17,12 @@ const logo = `${import.meta.env.BASE_URL}quietly-icon.png`
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--bg, #18181b);
+  background-color: #18181b;
   z-index: 9999;
 }
 
 .loader-logo img { display: block; width: 96px; height: 96px; object-fit: contain; }
 .loader-logo img { filter: brightness(0) invert(1); }
-:global(html[data-theme="light"]) .loader-logo img { filter: brightness(0); }
 
 .loader-logo {
   animation: pulse 1.6s ease-in-out infinite;

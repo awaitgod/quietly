@@ -5,17 +5,22 @@ const economyStore = useEconomyStore()
 import EmojiText from '../common/EmojiText.vue'
 import { emojiHtml } from '../../utils/emoji'
 
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type {
   Message,
   UserProfile,
   ForwardContentPayload,
   GiftContentPayload,
   ServiceContentPayload,
+  ImageContentPayload,
+  AudioContentPayload,
 } from '../../types'
 import { CONTENT_PREFIX, UNICODE_FORMAT } from '../../types'
 import { useAuthStore } from '../../stores/auth'
+import { useAudioStore } from '../../stores/audio'
 import { stickerUrl as resolveStickerUrl, isVideoSticker } from '../../utils/stickers'
+import { useSettingsStore } from '../../stores/settings'
+import { decryptText, isEncryptedMessage } from '../../utils/encryption'
 import SolarIcon from '../common/SolarIcon.vue'
 
 const props = withDefaults(
@@ -52,9 +57,41 @@ const emit = defineEmits<{
   (e: 'double-tap', message: Message): void
   (e: 'reaction', payload: { message: Message; emoji: string }): void
   (e: 'jump-to-reply', replyId: string | number): void
+  (e: 'open-sticker-pack', sticker: string): void
 }>()
 
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
+
+const resolvedText = ref('')
+const isKeyEncrypted = ref(false)
+const isLockedEncrypted = ref(false)
+
+watch(
+  [() => props.message.content, () => settingsStore.encryptionKey],
+  async ([msgContent, key]: [string, string]) => {
+    let raw = msgContent
+    if (isForward.value && forwardPayload.value) {
+      raw = forwardPayload.value.c
+    }
+    if (isEncryptedMessage(raw)) {
+      isKeyEncrypted.value = true
+      const res = await decryptText(raw, key)
+      if (res.status === 'decrypted') {
+        resolvedText.value = res.text
+        isLockedEncrypted.value = false
+      } else {
+        resolvedText.value = 'Текст зашифрован'
+        isLockedEncrypted.value = true
+      }
+    } else {
+      isKeyEncrypted.value = false
+      isLockedEncrypted.value = false
+      resolvedText.value = raw
+    }
+  },
+  { immediate: true }
+)
 
 const isMine = computed(() => {
   return props.message.sender_id === authStore.user?.id
@@ -123,6 +160,74 @@ const isE2E = computed(() => {
   )
 })
 
+// Image message (img::)
+const isImage = computed(() => {
+  return props.message.content.startsWith(CONTENT_PREFIX.IMAGE)
+})
+
+const imagePayload = computed<ImageContentPayload | null>(() => {
+  if (!isImage.value) return null
+  try {
+    return JSON.parse(props.message.content.slice(CONTENT_PREFIX.IMAGE.length))
+  } catch {
+    return { url: props.message.content.slice(CONTENT_PREFIX.IMAGE.length) }
+  }
+})
+
+// Audio message (audio::)
+const isAudio = computed(() => {
+  return props.message.content.startsWith(CONTENT_PREFIX.AUDIO)
+})
+
+const audioPayload = computed<AudioContentPayload | null>(() => {
+  if (!isAudio.value) return null
+  try {
+    return JSON.parse(props.message.content.slice(CONTENT_PREFIX.AUDIO.length))
+  } catch {
+    return null
+  }
+})
+
+const audioStore = useAudioStore()
+const isCurrentAudioPlaying = computed(() => {
+  return audioStore.currentTrack?.audio_url === audioPayload.value?.url && audioStore.isPlaying
+})
+
+function handleToggleAudio() {
+  if (!audioPayload.value) return
+  const trackId = `msg_${props.message.id}`
+  const trackItem = {
+    id: trackId,
+    user_id: props.message.sender_id,
+    title: audioPayload.value.title || 'Аудиозапись',
+    artist: audioPayload.value.artist || (isMine.value ? 'Вы' : props.senderProfile?.name || 'Музыка'),
+    duration: audioPayload.value.duration || 0,
+    audio_path: '',
+    audio_url: audioPayload.value.url,
+  }
+  if (audioStore.currentTrack?.audio_url === audioPayload.value.url) {
+    audioStore.togglePlay()
+  } else {
+    // Inject and play
+    const existingIdx = audioStore.tracks.findIndex(t => t.audio_url === audioPayload.value!.url)
+    if (existingIdx !== -1) {
+      audioStore.playTrack(existingIdx)
+    } else {
+      audioStore.tracks.unshift(trackItem)
+      audioStore.playTrack(0)
+    }
+  }
+}
+
+function handleImageClick() {
+  if (!imagePayload.value?.url) return
+  if (props.isSelectionMode) {
+    emit('select', props.message)
+    return
+  }
+  settingsStore.openImagePreview(imagePayload.value.url, imagePayload.value.name || 'Изображение')
+}
+
 // 6. Unicode formatting parser
 function renderFormattedContent(text: string): string {
   if (!text) return ''
@@ -147,6 +252,9 @@ function renderFormattedContent(text: string): string {
 }
 
 const displayContent = computed(() => {
+  if (isKeyEncrypted.value) {
+    return resolvedText.value
+  }
   if (isForward.value && forwardPayload.value) {
     return forwardPayload.value.c
   }
@@ -167,6 +275,7 @@ const replyPreview = computed(() => {
   if (!original || original.deleted_for_all) return 'Сообщение недоступно'
   if (original.content.startsWith('sticker::')) return 'Стикер'
   if (original.content.startsWith('gift::')) return 'Подарок'
+  if (isEncryptedMessage(original.content)) return '🔒 Зашифрованное сообщение'
   return original.content || 'Сообщение'
 })
 
@@ -290,7 +399,7 @@ function handleBubbleClick() {
       <div
         class="chat-bubble"
         :class="[
-          { 'sticker-bubble': isSticker, 'gift-bubble': isGift },
+          { 'sticker-bubble': isSticker, 'gift-bubble': isGift, 'image-bubble': isImage, 'audio-bubble': isAudio },
           `pos-${groupPosition}`,
           { 'anim-in': isNew },
         ]"
@@ -314,7 +423,7 @@ function handleBubbleClick() {
       </button>
 
       <!-- Sticker Image -->
-      <div v-if="isSticker" class="sticker-wrap">
+      <div v-if="isSticker" class="sticker-wrap" role="button" tabindex="0" aria-label="Открыть набор стикеров" @click.stop="isSelectionMode ? emit('select', message) : emit('open-sticker-pack', message.content.slice(CONTENT_PREFIX.STICKER.length))" @keydown.enter.stop.prevent="isSelectionMode ? emit('select', message) : emit('open-sticker-pack', message.content.slice(CONTENT_PREFIX.STICKER.length))" @keydown.space.stop.prevent="isSelectionMode ? emit('select', message) : emit('open-sticker-pack', message.content.slice(CONTENT_PREFIX.STICKER.length))">
         <video v-if="!stickerFailed && isVideoSticker(stickerUrl)" :src="stickerUrl" class="sticker-img" autoplay loop muted playsinline aria-label="Стикер" @error="stickerFailed = true" /><img v-else-if="!stickerFailed" :src="stickerUrl" alt="Стикер" class="sticker-img" @error="stickerFailed = true" /><span v-else class="sticker-error">Стикер недоступен</span>
       </div>
 
@@ -331,10 +440,42 @@ function handleBubbleClick() {
         <span class="e2e-text">Зашифрованное E2E сообщение</span>
       </div>
 
-      <!-- Message Text with Unicode Delimiters Support -->
+      <!-- Image Message Attachment -->
+      <div v-else-if="isImage && imagePayload" class="msg-image-wrap" @click.stop="handleImageClick">
+        <img :src="imagePayload.url" alt="Фотография" class="msg-image" loading="lazy" />
+      </div>
+
+      <!-- Audio / Music Message Attachment -->
+      <div v-else-if="isAudio && audioPayload" class="msg-audio-card" @click.stop="handleToggleAudio">
+        <button
+          type="button"
+          class="msg-audio-play-btn"
+          :class="{ playing: isCurrentAudioPlaying }"
+          aria-label="Воспроизвести / пауза"
+          @click.stop="handleToggleAudio"
+        >
+          <SolarIcon :name="isCurrentAudioPlaying ? 'pause-bold' : 'play-bold'" :size="18" color="#ffffff" />
+        </button>
+        <div class="msg-audio-info">
+          <div class="msg-audio-title">{{ audioPayload.title }}</div>
+          <div class="msg-audio-sub">
+            <span>{{ audioPayload.artist || 'Музыка' }}</span>
+            <span v-if="audioPayload.duration" class="msg-audio-dur">{{ Math.floor(audioPayload.duration / 60) }}:{{ (Math.floor(audioPayload.duration % 60)).toString().padStart(2, '0') }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Key Encrypted: Locked status -->
+      <div v-else-if="isKeyEncrypted && isLockedEncrypted" class="key-enc-locked">
+        <SolarIcon name="lock-keyhole-linear" :size="16" color="#f87171" />
+        <span class="enc-locked-label">Текст зашифрован</span>
+      </div>
+
+      <!-- Message Text with Unicode Delimiters Support (Decrypted or Plaintext) -->
       <div
         v-else
         class="chat-bubble-text"
+        :class="{ 'key-enc-decrypted': isKeyEncrypted }"
         v-html="renderFormattedContent(displayContent)"
       ></div>
 
@@ -694,10 +835,124 @@ function handleBubbleClick() {
 .chat-bubble-row .chat-bubble.sticker-bubble .bubble-tick { color: #fff; }
 .chat-bubble-row .chat-bubble.sticker-bubble .bubble-tick.read { color: #b7cbff; }
 
+.sticker-wrap { cursor: pointer; }
 .sticker-wrap img, .sticker-wrap video {
   max-width: 160px;
   max-height: 160px;
   display: block;
+}
+
+/* Image Message */
+.image-bubble {
+  padding: 4px 4px 6px 4px !important;
+  max-width: 320px;
+  overflow: hidden;
+}
+.msg-image-wrap {
+  cursor: pointer;
+  border-radius: 14px;
+  overflow: hidden;
+  max-width: 312px;
+  max-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.15);
+}
+.msg-image {
+  width: 100%;
+  height: 100%;
+  max-height: 380px;
+  object-fit: cover;
+  display: block;
+  border-radius: 14px;
+  transition: opacity 0.15s;
+}
+.msg-image-wrap:hover .msg-image {
+  opacity: 0.95;
+}
+.image-bubble .chat-bubble-meta {
+  margin-top: 4px;
+  padding-right: 6px;
+}
+
+/* Audio Message */
+.audio-bubble {
+  min-width: 240px;
+  max-width: 320px;
+  padding: 10px 14px !important;
+}
+.msg-audio-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.msg-audio-play-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #0a84ff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.15s, background-color 0.15s;
+}
+.msg-audio-play-btn:hover {
+  transform: scale(1.05);
+}
+.msg-audio-play-btn.playing {
+  background: #22c55e;
+}
+.msg-audio-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.msg-audio-title {
+  font-size: var(--text-14);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+}
+.chat-bubble-row.mine .msg-audio-title {
+  color: #111113;
+}
+:global(html[data-theme="light"]) .chat-bubble-row.mine .msg-audio-title {
+  color: #20222a;
+}
+.chat-bubble-row:not(.mine) .msg-audio-title {
+  color: var(--text);
+}
+.msg-audio-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-12);
+  color: inherit;
+  opacity: 0.75;
+}
+.chat-bubble-row.mine .msg-audio-sub {
+  color: rgba(17, 17, 19, 0.7);
+}
+:global(html[data-theme="light"]) .chat-bubble-row.mine .msg-audio-sub {
+  color: #667080;
+}
+.chat-bubble-row:not(.mine) .msg-audio-sub {
+  color: var(--muted);
+  opacity: 1;
+}
+.msg-audio-dur {
+  font-variant-numeric: tabular-nums;
 }
 
 .fwd-banner {
@@ -735,6 +990,25 @@ function handleBubbleClick() {
   color: #d1d5db;
 }
 
+.key-enc-locked {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px 0;
+  color: #f87171;
+  font-weight: 500;
+  font-size: var(--text-14);
+  user-select: none;
+}
+.enc-locked-label {
+  letter-spacing: 0.2px;
+}
+.chat-bubble-row.mine .key-enc-locked {
+  color: #dc2626;
+}
+.key-enc-decrypted {
+  display: block;
+}
 .e2e-box {
   display: flex;
   align-items: center;

@@ -77,6 +77,15 @@ function handleHeaderClick() {
   }
 }
 
+function handleAvatarClick(e: MouseEvent) {
+  e.stopPropagation()
+  if (chatAvatar.value) {
+    settingsStore.openImagePreview(chatAvatar.value, chatTitle.value)
+  } else {
+    handleHeaderClick()
+  }
+}
+
 function toggleSearch() {
   chatStore.isSearchOpen = !chatStore.isSearchOpen
 }
@@ -105,7 +114,7 @@ function toggleSearch() {
         aria-label="Информация о чате"
         class="chat-top-avatar"
         :class="{ 'is-fav': chatStore.activeChat?.id === FAV_ID }"
-        @click="handleHeaderClick"
+        @click.stop="handleAvatarClick"
       >
         <img v-if="chatAvatar" :src="chatAvatar" alt="" />
         <span v-else-if="chatStore.activeChat?.id === FAV_ID" class="fav-box">

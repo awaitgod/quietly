@@ -272,9 +272,27 @@ export const CONTENT_PREFIX = {
     FORWARD: 'fwd::',
     GIFT: 'gift::',
     SERVICE: 'svc::',
+    IMAGE: 'img::',
+    AUDIO: 'audio::',
     E2E_DM: 'e2e1:',
     E2E_GRP: 'g2:',
 } as const;
+
+export interface ImageContentPayload {
+    url: string;
+    w?: number;
+    h?: number;
+    name?: string;
+    size?: number;
+}
+
+export interface AudioContentPayload {
+    url: string;
+    title: string;
+    artist?: string;
+    duration?: number;
+    size?: number;
+}
 export interface GiftStockItem {
     gift_id: string;
     total: number;

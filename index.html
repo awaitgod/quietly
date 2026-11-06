@@ -11,23 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Comfortaa:wght@500;700&family=Lobster&family=Pacifico&family=Playfair+Display:wght@500;700&family=Press+Start+2P&family=Russo+One&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="app">
-      <div id="startup-fallback" role="status" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#18181b;color:#fff;font:14px system-ui,sans-serif;text-align:center;padding:24px">
-        <img src="/quietly-icon.png" alt="Quietly" width="80" height="80" />
-        <span id="startup-message">загружаем quietly...</span>
-        <button id="startup-retry" type="button" hidden style="border:0;border-radius:999px;padding:12px 24px;background:#fff;color:#18181b;font:600 14px system-ui;cursor:pointer">попробовать снова</button>
-      </div>
-    </div>
-    <script>
-      window.setTimeout(function () {
-        var fallback = document.getElementById('startup-fallback');
-        if (!fallback) return;
-        document.getElementById('startup-message').textContent = 'не удалось загрузить приложение. проверьте подключение и попробуйте снова.';
-        var retry = document.getElementById('startup-retry');
-        retry.hidden = false;
-        retry.addEventListener('click', function () { window.location.reload(); });
-      }, 12000);
-    </script>
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
