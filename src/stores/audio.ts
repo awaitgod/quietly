@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { tablesApi, storageApi } from '../services/supabase';
 import type { AudioTrack } from '../types';
 import { useAuthStore } from './auth';
@@ -20,6 +20,17 @@ export const useAudioStore = defineStore('audio', () => {
             return tracks.value[currentTrackIndex.value];
         }
         return null;
+    });
+    const currentTrackIsFavorite = computed(() => !!currentTrack.value && tracks.value.some(track => !track.transient && track.audio_url === currentTrack.value?.audio_url && track.is_favorite));
+    watch(() => authStore.user?.id, (id, previous) => {
+        if (id === previous) return;
+        audio.pause();
+        audio.removeAttribute('src');
+        tracks.value = [];
+        currentTrackIndex.value = -1;
+        isNowPlayingStripVisible.value = false;
+        currentTime.value = 0;
+        duration.value = 0;
     });
     function formatTime(s: number): string {
         const secs = Math.max(0, Math.floor(s || 0));
@@ -52,7 +63,12 @@ export const useAudioStore = defineStore('audio', () => {
             if (error)
                 throw error;
             if (data) {
-                tracks.value = data as AudioTrack[];
+                if (authStore.user?.id !== myId) return;
+                const current = currentTrack.value;
+                const saved = data as AudioTrack[];
+                const temporary = tracks.value.filter(track => track.transient && !saved.some(item => item.audio_url === track.audio_url));
+                tracks.value = [...saved, ...temporary];
+                currentTrackIndex.value = current ? tracks.value.findIndex(track => track.audio_url === current.audio_url) : -1;
             }
         }
         catch (err) {
@@ -124,14 +140,41 @@ export const useAudioStore = defineStore('audio', () => {
     }
     async function toggleFavoriteTrack(track: AudioTrack) {
         if (!authStore.user?.id)
-            return;
+            throw new Error('Войдите в аккаунт');
         const myId = authStore.user.id;
+        const url = track.audio_url;
         try {
-            await tablesApi.userTracks.setFavorite(myId, track.id);
+            let saved = tracks.value.find(item => !item.transient && item.user_id === myId && item.audio_url === url);
+            if (!saved) {
+                const { data, error } = await tablesApi.userTracks.addTrack({
+                    id: crypto.randomUUID(), user_id: myId, title: track.title, artist: track.artist,
+                    duration: track.duration || 0, audio_path: '', audio_url: url,
+                    cover_path: null, cover_url: track.cover_url || null,
+                });
+                if (error) throw error;
+                if (!data) throw new Error('Не удалось сохранить аудиозапись');
+                saved = data as AudioTrack;
+            }
+            if (authStore.user?.id !== myId) throw new Error('Аккаунт изменился');
+            const result = saved.is_favorite
+                ? await tablesApi.userTracks.clearFavorite(myId, saved.id)
+                : await tablesApi.userTracks.setFavorite(myId, saved.id);
+            if (result.error) throw result.error;
+            if (!result.data) throw new Error('Сервер не подтвердил изменение');
+            if (authStore.user?.id !== myId) return;
+            const currentUrl = currentTrack.value?.audio_url;
+            const updated = result.data as AudioTrack;
+            tracks.value = tracks.value
+                .filter(item => item.id !== updated.id && !(item.transient && item.audio_url === updated.audio_url))
+                .map(item => updated.is_favorite ? { ...item, is_favorite: false } : item);
+            tracks.value.push(updated);
+            currentTrackIndex.value = currentUrl ? tracks.value.findIndex(item => item.audio_url === currentUrl) : -1;
             await loadTracks();
         }
         catch (err) {
             console.error('[Audio] toggleFavoriteTrack error:', err);
+            await loadTracks();
+            throw err;
         }
     }
     async function uploadTrack(title: string, artist: string, audioFile: File, coverFile?: File) {
@@ -177,10 +220,10 @@ export const useAudioStore = defineStore('audio', () => {
     async function deleteTrack(track: AudioTrack) {
         try {
             await tablesApi.userTracks.deleteTrack(track.id);
-            const toRemove = [track.audio_path];
+            const toRemove = track.audio_path ? [track.audio_path] : [];
             if (track.cover_path)
                 toRemove.push(track.cover_path);
-            await storageApi.tracks.removeFiles(toRemove);
+            if (toRemove.length) await storageApi.tracks.removeFiles(toRemove);
             tracks.value = tracks.value.filter((t) => t.id !== track.id);
         }
         catch (err) {
@@ -226,6 +269,7 @@ export const useAudioStore = defineStore('audio', () => {
         tracks,
         currentTrackIndex,
         currentTrack,
+        currentTrackIsFavorite,
         isPlaying,
         currentTime,
         duration,

@@ -32,6 +32,13 @@ onMounted(() => {
 onUnmounted(() => composerObserver?.disconnect())
 
 const isGroup = computed(() => !!groupsStore.activeGroup)
+const joinError = ref('')
+watch(() => groupsStore.activeGroup?.id, () => { joinError.value = '' })
+async function joinGroup() {
+  joinError.value = ''
+  try { await groupsStore.joinGroup() }
+  catch { joinError.value = 'Не удалось вступить в группу. Попробуйте ещё раз.' }
+}
 
 const messages = computed(() => {
   return isGroup.value ? groupsStore.groupMessages : chatStore.messages
@@ -91,6 +98,7 @@ function toggleStickerPack() {
   } catch { stickerPackError.value = 'Не удалось сохранить набор стикеров.' }
 }
 function sendStickerFromPack(sticker: string) {
+  if (isGroup.value && groupsStore.membershipStatus !== 'member') return
   if (isGroup.value) void groupsStore.sendGroupMessage(`sticker::${sticker}`)
   else void chatStore.sendMessage(`sticker::${sticker}`)
   stickerPack.value = null
@@ -100,6 +108,7 @@ const currentConversationId = computed(() => String(groupsStore.activeGroup?.id 
 const suggestedSticker = computed(() => stickerForPartner(currentConversationId.value))
 watch(currentConversationId, () => { suggestionAvailable.value = true; chatStore.exitSelectionMode() })
 function sendSuggestedSticker() {
+  if (isGroup.value && groupsStore.membershipStatus !== 'member') return
   if (isGroup.value) groupsStore.sendGroupMessage(`sticker::${suggestedSticker.value}`)
   else chatStore.sendMessage(`sticker::${suggestedSticker.value}`)
 }
@@ -172,12 +181,14 @@ function scrollToMessageId(id: string | number) {
 
     <!-- Message List (Virtual Scroll TanStack) -->
     <div v-if="messages.length === 0 && !(isGroup ? groupsStore.isGroupLoading : chatStore.isMessagesLoading)" class="chat-welcome">
-      <template v-if="suggestionAvailable"><img :src="stickerUrl(suggestedSticker)" alt="" @error="suggestionAvailable = false" /><p>Начните переписку со стикера</p><button type="button" @click="sendSuggestedSticker">Отправить стикер</button></template>
+      <template v-if="suggestionAvailable && (!isGroup || groupsStore.membershipStatus === 'member')"><img :src="stickerUrl(suggestedSticker)" alt="" @error="suggestionAvailable = false" /><p>Начните переписку со стикера</p><button type="button" @click="sendSuggestedSticker">Отправить стикер</button></template>
       <p v-else>Здесь пока нет сообщений. Напишите первое!</p>
     </div>
     <MessageList v-else
       ref="messageListRef"
-      :key="String(groupsStore.activeGroup?.id || chatStore.activeChat?.id || '')"
+      :key="`${authStore.user?.id || ''}:${isGroup ? 'group' : 'dm'}:${groupsStore.activeGroup?.id || chatStore.activeChat?.id || ''}`"
+      :conversation-id="`${isGroup ? 'group' : 'dm'}:${groupsStore.activeGroup?.id || chatStore.activeChat?.id || ''}`"
+      :loading="isGroup ? groupsStore.isGroupLoading : chatStore.isMessagesLoading"
       :messages="messages"
       :composer-height="composerHeight"
       :is-group="isGroup"
@@ -197,7 +208,16 @@ function scrollToMessageId(id: string | number) {
     <div v-if="stickerPackError" class="reaction-notice" role="alert" @click="stickerPackError = ''">{{ stickerPackError }}</div>
     <StickerPackPreview v-if="stickerPack" :pack="stickerPack" :official="stickerPack.official" :added="addedStickerPacks.includes(stickerPack.id)" @close="stickerPack = null" @toggle="toggleStickerPack" @select="sendStickerFromPack" />
     <!-- Chat Input -->
-    <div ref="composerRef" class="composer-overlay"><ChatInput /></div>
+    <div ref="composerRef" class="composer-overlay">
+      <ChatInput v-if="!isGroup || groupsStore.membershipStatus === 'member'" />
+      <div v-else class="join-area">
+        <p v-if="joinError" class="join-error" role="alert">{{ joinError }}</p>
+        <p v-else-if="groupsStore.membershipStatus === 'error' && groupsStore.membershipError" class="join-error" role="alert">{{ groupsStore.membershipError }}</p>
+        <button v-if="groupsStore.membershipStatus === 'not-member'" type="button" class="join-button" :disabled="groupsStore.isJoining" @click="joinGroup">{{ groupsStore.isJoining ? 'Вступаем…' : 'Вступить в группу' }}</button>
+        <button v-else-if="groupsStore.membershipStatus === 'error'" type="button" class="join-button" @click="groupsStore.checkMembership()">Не удалось проверить участие. Повторить</button>
+        <div v-else class="join-loading" role="status">Проверяем участие…</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -215,6 +235,11 @@ function scrollToMessageId(id: string | number) {
 .reaction-notice { position:absolute; top:72px; left:50%; transform:translateX(-50%); z-index:30; padding:var(--space-3) var(--space-4); border-radius:var(--radius-md); background:var(--surface); color:var(--text); box-shadow:0 8px 24px rgba(0,0,0,.25); font-size:var(--text-14); }
 .composer-overlay { position: absolute; left: 0; right: 0; bottom: 0; z-index: 20; pointer-events: none; }
 .composer-overlay :deep(.chat-input-wrapper) { pointer-events: auto; }
+.join-area { pointer-events: auto; padding: 10px 24px 18px; text-align: center; }
+.join-button, .join-loading { width: 100%; min-height: 48px; border: 0; border-radius: 999px; padding: 10px 16px; background: var(--surface); color: var(--text); font: inherit; font-weight: 600; }
+.join-button { cursor: pointer; }
+.join-button:disabled { opacity: .6; cursor: wait; }
+.join-error { color: #e76d7c; font-size: var(--text-13); }
 .chat-view {
   display: flex;
   flex-direction: column;

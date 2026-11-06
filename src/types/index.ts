@@ -229,6 +229,7 @@ export interface AudioTrack {
     is_favorite?: boolean;
     src_id?: string | null;
     created_at?: string;
+    transient?: boolean;
 }
 export type UserTrack = AudioTrack;
 export interface GiftItem {

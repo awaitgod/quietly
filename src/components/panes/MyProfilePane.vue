@@ -19,6 +19,11 @@ async function copyUsername() {
   try { await navigator.clipboard.writeText(`@${profile.value.username}`); copied.value = true }
   catch { copied.value = false }
 }
+function playFavorite() {
+  if (!favTrack.value) return
+  if (audio.currentTrack?.audio_url === favTrack.value.audio_url) audio.togglePlay()
+  else audio.playTrack(favTrack.value)
+}
 </script>
 
 <template>
@@ -47,7 +52,7 @@ async function copyUsername() {
       <div v-if="favTrack" class="own-card own-track">
         <div class="own-cover"><img v-if="favTrack.cover_url" :src="favTrack.cover_url" alt="" /><SolarIcon v-else name="music-notes-linear" :size="20" /></div>
         <div class="own-track-info"><strong>{{ favTrack.title }}</strong><span>{{ favTrack.artist }}</span></div>
-        <button type="button" class="own-icon-button" :aria-label="audio.isPlaying && audio.currentTrack?.id === favTrack.id ? 'Приостановить' : 'Воспроизвести'" @click="audio.playTrack(audio.tracks.indexOf(favTrack))"><SolarIcon :name="audio.isPlaying && audio.currentTrack?.id === favTrack.id ? 'pause-circle-bold' : 'play-circle-bold'" :size="24" /></button>
+        <button type="button" class="own-icon-button" :aria-label="audio.isPlaying && audio.currentTrack?.audio_url === favTrack.audio_url ? 'Приостановить' : 'Воспроизвести'" @click="playFavorite"><SolarIcon :name="audio.isPlaying && audio.currentTrack?.audio_url === favTrack.audio_url ? 'pause-circle-bold' : 'play-circle-bold'" :size="24" /></button>
       </div>
     </div>
   </section>

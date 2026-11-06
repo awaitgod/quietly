@@ -109,6 +109,7 @@ export const tablesApi = {
         getUserGroups: (meId: string) => supabase.from('group_members').select('groups(*)').eq('user_id', meId),
         getGroupMembers: (groupId: string) => supabase.from('group_members').select('user_id, role').eq('group_id', groupId),
         getJoinDate: (groupId: string, meId: string) => supabase.from('group_members').select('created_at').eq('group_id', groupId).eq('user_id', meId).maybeSingle(),
+        getMembership: (groupId: string, meId: string) => supabase.from('group_members').select('user_id').eq('group_id', groupId).eq('user_id', meId).limit(1),
         insertMembers: (rows: Array<{
             group_id: string;
             user_id: string;
@@ -323,11 +324,13 @@ export const tablesApi = {
             cover_path?: string | null;
             cover_url?: string | null;
             src_id?: string | null;
-        }) => supabase.from('user_tracks').insert(track),
+        }) => supabase.from('user_tracks').insert(track).select().single(),
         deleteTrack: (trackId: string) => supabase.from('user_tracks').delete().eq('id', trackId),
         setFavorite: async (meId: string, trackId: string) => {
-            await supabase.from('user_tracks').update({ is_favorite: false }).eq('user_id', meId).eq('is_favorite', true);
-            return supabase.from('user_tracks').update({ is_favorite: true }).eq('id', trackId);
+            const cleared = await supabase.from('user_tracks').update({ is_favorite: false }).eq('user_id', meId).eq('is_favorite', true);
+            if (cleared.error) return cleared;
+            return supabase.from('user_tracks').update({ is_favorite: true }).eq('id', trackId).eq('user_id', meId).select().single();
         },
+        clearFavorite: (meId: string, trackId: string) => supabase.from('user_tracks').update({ is_favorite: false }).eq('id', trackId).eq('user_id', meId).select().single(),
     },
 };

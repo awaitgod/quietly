@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useAudioStore } from '../../stores/audio'
+import { ref, watch } from 'vue'
 import SolarIcon from '../common/SolarIcon.vue'
 
 const emit = defineEmits<{
@@ -7,6 +8,17 @@ const emit = defineEmits<{
 }>()
 
 const audioStore = useAudioStore()
+const favoriteBusy = ref(false)
+const favoriteError = ref('')
+watch(() => audioStore.currentTrack?.audio_url, () => { favoriteError.value = '' })
+async function toggleFavorite() {
+  if (!audioStore.currentTrack || favoriteBusy.value) return
+  favoriteBusy.value = true
+  favoriteError.value = ''
+  try { await audioStore.toggleFavoriteTrack(audioStore.currentTrack) }
+  catch { favoriteError.value = 'Не удалось обновить профиль. Попробуйте ещё раз.' }
+  finally { favoriteBusy.value = false }
+}
 
 function handleSeek(e: Event) {
   const target = e.target as HTMLInputElement
@@ -89,26 +101,29 @@ function handleSeek(e: Event) {
       <button
         type="button"
         class="tk-fav-btn"
-        @click="audioStore.toggleFavoriteTrack(audioStore.currentTrack)"
+        :disabled="favoriteBusy"
+        @click="toggleFavorite"
       >
         <SolarIcon
-          :name="audioStore.currentTrack.is_favorite ? 'star-bold' : 'star-linear'"
+          :name="audioStore.currentTrackIsFavorite ? 'star-bold' : 'star-linear'"
           :size="18"
-          :color="audioStore.currentTrack.is_favorite ? '#f59e0b' : 'currentColor'"
+          :color="audioStore.currentTrackIsFavorite ? '#f59e0b' : 'currentColor'"
         />
         <span>
           {{
-            audioStore.currentTrack.is_favorite
+            audioStore.currentTrackIsFavorite
               ? 'Убрать из профиля'
               : 'Поставить в профиль'
           }}
         </span>
       </button>
+      <p v-if="favoriteError" class="tk-fav-error" role="alert">{{ favoriteError }}</p>
     </div>
   </div>
 </template>
 
 <style scoped>
+.tk-fav-error { margin: 10px 0 0; color: #e76876; font-size: var(--text-12); text-align: center; }
 .tk-ov {
   position: fixed;
   inset: 0;

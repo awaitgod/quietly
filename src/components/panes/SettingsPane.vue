@@ -4,12 +4,10 @@ import EmojiText from '../common/EmojiText.vue'
 import { ref, computed } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
-import { useAudioStore } from '../../stores/audio'
 import { useEconomyStore } from '../../stores/economy'
 import SolarIcon from '../common/SolarIcon.vue'
 import KillerFeaturesPane from './KillerFeaturesPane.vue'
 import SecurityPane from './SecurityPane.vue'
-import type { AudioTrack } from '../../types'
 
 const emit = defineEmits<{
   (e: 'open-legal', doc: 'terms' | 'policy'): void
@@ -20,7 +18,6 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
-const audioStore = useAudioStore()
 const economyStore = useEconomyStore()
 
 const currentSubView = ref<'main' | 'look' | 'sec' | 'devices' | 'badges' | 'features'>('main')
@@ -40,9 +37,6 @@ function handleLogout() {
   }
 }
 
-function playTrack(track: AudioTrack) {
-  audioStore.playTrack(track)
-}
 </script>
 
 <template>
@@ -213,38 +207,6 @@ function playTrack(track: AudioTrack) {
         Загрузить
       </button>
 
-      <!-- Section: Треки -->
-      <div class="sg-sec" style="margin-top: 24px;">ТРЕКИ</div>
-      <div v-if="audioStore.tracks.length > 0" class="tk-list">
-        <div
-          v-for="track in audioStore.tracks"
-          :key="track.id"
-          class="tk-item"
-        >
-          <div class="tk-icon-wrap">
-            <SolarIcon name="music-notes-bold" :size="20" color="#ffffff" />
-          </div>
-          <div class="tk-info">
-            <div class="tk-title">{{ track.title }}</div>
-            <div class="tk-artist">{{ track.artist || '1' }}</div>
-          </div>
-          <div class="tk-duration">{{ Math.floor(track.duration / 60) }}:{{ (track.duration % 60).toString().padStart(2, '0') }}</div>
-          <button
-            type="button"
-            class="tk-play-circle"
-            @click="playTrack(track)"
-          >
-            <SolarIcon
-              :name="audioStore.currentTrack?.id === track.id && audioStore.isPlaying ? 'pause-bold' : 'play-bold'"
-              :size="16"
-              color="#ffffff"
-            />
-          </button>
-        </div>
-      </div>
-      <div v-else class="tk-empty">
-        Нет добавленных треков
-      </div>
     </div>
 
       <!-- SUBVIEW: KILLER FEATURES (Киллер фичи) -->

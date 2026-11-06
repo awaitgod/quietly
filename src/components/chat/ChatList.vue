@@ -8,6 +8,7 @@ import { useGroupsStore } from '../../stores/groups'
 import { useSettingsStore } from '../../stores/settings'
 import { FAV_ID } from '../../services/supabase'
 import { decryptText, isEncryptedMessage } from '../../utils/encryption'
+import { attachmentPreview } from '../../utils/chatPreview'
 import SolarIcon from '../common/SolarIcon.vue'
 
 const authStore = useAuthStore()
@@ -48,6 +49,7 @@ const combinedChatList = computed(() => {
     username: item.profile.username,
     avatar_url: item.profile.avatar_url,
     lastMessage: item.lastMessage,
+    attachment: item.lastMessage ? attachmentPreview(item.lastMessage.content) : null,
     unreadCount: item.unreadCount,
     isGroup: false,
     rawProfile: item.profile,
@@ -59,6 +61,7 @@ const combinedChatList = computed(() => {
     username: g.username || '',
     avatar_url: g.avatar_url,
     lastMessage: g.last_message || null,
+    attachment: g.last_message ? attachmentPreview(g.last_message.content) : null,
     unreadCount: g.unread_count || 0,
     isGroup: true,
     rawGroup: g,
@@ -210,6 +213,7 @@ function toggleDesktopMenu() {
                   <span v-if="isMessageOutgoing(chat.lastMessage)" class="preview-prefix">Вы: </span>
                   <span v-if="chat.lastMessage.content.startsWith('sticker::')">Стикер</span>
                   <span v-else-if="chat.lastMessage.content.startsWith('svc::')">Служебное уведомление</span>
+                  <span v-else-if="chat.attachment" class="preview-attachment"><img v-if="chat.attachment.thumbnail" class="preview-thumbnail" :src="chat.attachment.thumbnail" alt="" loading="lazy" @error="($event.target as HTMLImageElement).style.display = 'none'" /><SolarIcon v-else :name="chat.attachment.kind === 'image' ? 'gallery-linear' : 'music-notes-linear'" :size="15" /><span>{{ chat.attachment.text }}</span></span>
                   <span v-else><EmojiText :text="getLastMessagePreview(chat.lastMessage.content)" /></span>
                 </template>
                 <template v-else-if="chat.id === FAV_ID">
@@ -493,6 +497,9 @@ function toggleDesktopMenu() {
   color: var(--muted, #a1a1aa);
   font-weight: 500;
 }
+.preview-attachment { display: inline-flex; max-width: 100%; align-items: center; gap: 5px; vertical-align: middle; }
+.preview-attachment > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-thumbnail { width: 20px; height: 20px; flex: none; border-radius: 4px; object-fit: cover; }
 
 .chat-item.unread .chat-item-name {
   font-weight: 700;

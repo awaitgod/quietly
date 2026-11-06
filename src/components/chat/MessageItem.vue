@@ -62,6 +62,9 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+function openSenderProfile() {
+  if (props.senderProfile) settingsStore.openUserProfile(props.senderProfile)
+}
 
 const resolvedText = ref('')
 const isKeyEncrypted = ref(false)
@@ -211,6 +214,7 @@ function handleToggleAudio() {
     duration: audioPayload.value.duration || 0,
     audio_path: '',
     audio_url: audioPayload.value.url,
+    transient: true,
   }
   if (audioStore.currentTrack?.audio_url === audioPayload.value.url) {
     audioStore.togglePlay()
@@ -220,8 +224,8 @@ function handleToggleAudio() {
     if (existingIdx !== -1) {
       audioStore.playTrack(existingIdx)
     } else {
-      audioStore.tracks.unshift(trackItem)
-      audioStore.playTrack(0)
+      audioStore.tracks.push(trackItem)
+      audioStore.playTrack(audioStore.tracks.length - 1)
     }
   }
 }
@@ -286,8 +290,8 @@ const replyPreview = computed(() => {
   return original.content || 'Сообщение'
 })
 
-const QUICK_REACTIONS = ['👍', '❤️', '🔥', '👎', '🥰']
-const MORE_REACTIONS = ['👏', '😁', '😂', '🎉', '🤩', '😱', '🤔', '🤯', '🙏', '💯', '💩', '😍', '😭', '🤡', '🥳']
+const QUICK_REACTIONS = ['👍', '❤️', '🔥', '👎', '🥰', '👏', '😁']
+const MORE_REACTIONS = ['😂', '🎉', '🤩', '😱', '🤔', '🤯', '🙏', '💯', '💩', '😍', '😭', '🤡', '🥳']
 
 const reactionGroups = computed(() => {
   const raw = props.message.reactions
@@ -307,14 +311,21 @@ watch(() => reactionGroups.value.map(reaction => `${reaction.emoji}:${reaction.c
   if (!bubble || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   const before = bubble.getBoundingClientRect()
   bubbleResizeAnimation?.cancel()
+  bubble.classList.remove('reaction-resizing')
   await nextTick()
   if (bubbleElement.value !== bubble) return
   const after = bubble.getBoundingClientRect()
-  if (Math.abs(before.height - after.height) < 1 && Math.abs(before.width - after.width) < 1) return
-  bubbleResizeAnimation = bubble.animate(
-    [{ width: `${before.width}px`, height: `${before.height}px` }, { width: `${after.width}px`, height: `${after.height}px` }],
-    { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' },
+  if (!after.width || !after.height || (Math.abs(before.width - after.width) < 1 && Math.abs(before.height - after.height) < 1)) return
+  bubble.style.setProperty('--reaction-bubble-color', getComputedStyle(bubble).backgroundColor)
+  bubble.classList.add('reaction-resizing')
+  const animation = bubble.animate(
+    [{ transform: `scale(${before.width / after.width}, ${before.height / after.height})` }, { transform: 'scale(1, 1)' }],
+    { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)', pseudoElement: '::before' },
   )
+  bubbleResizeAnimation = animation
+  animation.finished.then(() => {
+    if (bubbleResizeAnimation === animation) bubble.classList.remove('reaction-resizing')
+  }).catch(() => {})
 }, { flush: 'pre' })
 const reactionEffect = ref<{ emoji: string; x: number; y: number; id: number; image?: string } | null>(null)
 const quickReactionEffects: Record<string, string> = {
@@ -433,10 +444,10 @@ function handleBubbleClick() {
 
       <!-- Theirs avatar in group -->
       <div v-if="isGroup && !isMine" class="avatar-col">
-        <div v-if="showAvatar" class="msg-avatar">
+        <button v-if="showAvatar" type="button" class="msg-avatar" :disabled="!senderProfile" :aria-label="`Открыть профиль ${senderProfile?.name || 'участника'}`" @click.stop="openSenderProfile">
           <img v-if="senderProfile?.avatar_url" :src="senderProfile.avatar_url" alt="" />
           <span v-else>{{ (senderProfile?.name || '?').charAt(0).toUpperCase() }}</span>
-        </div>
+        </button>
         <div v-else class="msg-avatar-spacer" />
       </div>
 
@@ -451,9 +462,7 @@ function handleBubbleClick() {
         @click="!isSelectionMode && handleBubbleClick()"
       >
         <!-- Group Sender Name (shown on top of group only) -->
-        <div v-if="isGroup && !isMine && senderProfile && showSenderName" class="gb-nm">
-          {{ senderProfile.name }}
-        </div>
+        <button v-if="isGroup && !isMine && senderProfile && showSenderName" type="button" class="gb-nm" @click.stop="openSenderProfile"><EmojiText :text="senderProfile.name" /></button>
 
       <!-- Forward Header -->
       <div v-if="isForward && forwardPayload" class="fwd-banner">
@@ -495,11 +504,11 @@ function handleBubbleClick() {
         <button
           type="button"
           class="msg-audio-play-btn"
-          :class="{ playing: isCurrentAudioPlaying }"
-          aria-label="Воспроизвести / пауза"
+          :aria-label="isCurrentAudioPlaying ? 'Пауза' : 'Воспроизвести'"
           @click.stop="handleToggleAudio"
         >
-          <SolarIcon :name="isCurrentAudioPlaying ? 'pause-bold' : 'play-bold'" :size="18" color="#ffffff" />
+          <span class="msg-audio-icon" :class="{ visible: !isCurrentAudioPlaying }"><SolarIcon name="play-bold" :size="18" color="#ffffff" /></span>
+          <span class="msg-audio-icon" :class="{ visible: isCurrentAudioPlaying }"><SolarIcon name="pause-bold" :size="18" color="#ffffff" /></span>
         </button>
         <div class="msg-audio-info">
           <div class="msg-audio-title">{{ audioPayload.title }}</div>
@@ -512,7 +521,7 @@ function handleBubbleClick() {
 
       <!-- Key Encrypted: Locked status -->
       <div v-else-if="isKeyEncrypted && isLockedEncrypted" class="key-enc-locked">
-        <SolarIcon name="lock-keyhole-linear" :size="16" color="#f87171" />
+        <SolarIcon name="lock-keyhole-linear" :size="16" />
         <span class="enc-locked-label">Текст зашифрован</span>
       </div>
 
@@ -524,7 +533,7 @@ function handleBubbleClick() {
         v-html="renderFormattedContent(displayContent)"
       ></div>
 
-      <div class="bubble-footer" :class="{ 'with-reactions': reactionGroups.length && !isSticker && !isGift }">
+      <div class="bubble-footer" :class="{ 'with-reactions': reactionGroups.length }">
       <div v-if="reactionGroups.length" class="message-reactions"><button v-for="reaction in reactionGroups" :key="reaction.emoji" type="button" class="reaction-chip" :class="{ mine: reaction.mine }" :aria-label="`${reaction.emoji}: ${reaction.count}`" :aria-pressed="reaction.mine" @click.stop="emit('reaction', { message, emoji: reaction.emoji })"><EmojiText :text="reaction.emoji" /><span>{{ reaction.count }}</span></button></div>
       <!-- Metadata (pin, edited, time, read ticks) -->
       <div class="chat-bubble-meta">
@@ -754,7 +763,10 @@ function handleBubbleClick() {
   transition: border-radius 0.15s ease;
 }
 
-.chat-bubble-text { text-align: start; align-self: stretch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-bubble-text { width: 100%; text-align: left; align-self: stretch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-bubble.reaction-resizing { isolation: isolate; background-color: transparent !important; box-shadow: none; }
+.chat-bubble.reaction-resizing::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--reaction-bubble-color); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); transform-origin: left top; pointer-events: none; }
+.chat-bubble-row.mine .chat-bubble.reaction-resizing::before { transform-origin: right top; }
 
 /* Outgoing Message (White in Quietly, Black text) */
 .chat-bubble-row.mine .chat-bubble {
@@ -883,6 +895,9 @@ function handleBubbleClick() {
   color: #fff;
   margin-right: var(--space-2);
   flex-shrink: 0;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
 }
 
 .msg-avatar-spacer {
@@ -966,6 +981,7 @@ function handleBubbleClick() {
   user-select: none;
 }
 .msg-audio-play-btn {
+  position: relative;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -976,13 +992,24 @@ function handleBubbleClick() {
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
-  transition: transform 0.15s, background-color 0.15s;
+  transition: transform 0.15s;
 }
 .msg-audio-play-btn:hover {
   transform: scale(1.05);
 }
-.msg-audio-play-btn.playing {
-  background: #22c55e;
+.msg-audio-icon {
+  position: absolute;
+  display: flex;
+  opacity: 0;
+  transform: scale(.75);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.msg-audio-icon.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg-audio-icon { transition: none; }
 }
 .msg-audio-info {
   flex: 1;
@@ -1082,6 +1109,7 @@ function handleBubbleClick() {
 .chat-bubble-row.mine .key-enc-locked {
   color: #dc2626;
 }
+:global(html:not([data-theme="light"]) .chat-bubble-row .key-enc-locked) { color: #ffd8dd; }
 .key-enc-decrypted {
   display: block;
 }
@@ -1139,6 +1167,13 @@ function handleBubbleClick() {
   font-weight: 700;
   color: #6db3ff;
   margin-bottom: 3px;
+  align-self: stretch;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
 .reply-quote {
@@ -1215,23 +1250,24 @@ function handleBubbleClick() {
 
 .mm-react-strip {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--space-1);
-  padding: var(--space-1);
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .mm-rx {
   background: transparent;
   border: none;
-  font-size: var(--text-20);
-  padding: var(--space-1);
+  font-size: 18px;
+  padding: 2px;
   border-radius: 8px;
   cursor: pointer;
 }
 
 .mm-rx:hover {
   background: rgba(255, 255, 255, 0.1);
+  transform: none;
 }
 
 .mm-actions-card {
@@ -1270,15 +1306,17 @@ function handleBubbleClick() {
 .mm-extra { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease; }
 .mm-extra.open { grid-template-rows: 1fr; opacity: 1; }
 .mm-extra-inner { overflow: hidden; min-height: 0; }
-.mm-extra-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-1); padding: 0 var(--space-1); }
+.mm-extra-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; padding: 0 2px; }
 .mm-extra:not(.open) { visibility: hidden; transition: grid-template-rows .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease, visibility 0s linear .22s; }
-.mm-rx { min-width: 0; min-height: 36px; }
+.mm-rx { min-width: 0; min-height: 30px; }
 .message-reactions { display: flex; align-self: flex-start; justify-content: flex-start; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .bubble-footer { display: contents; }
-.bubble-footer.with-reactions { display: flex; align-items: end; flex-wrap: wrap; column-gap: 8px; }
+.bubble-footer.with-reactions { display: flex; align-self: stretch; align-items: end; justify-content: flex-start; flex-wrap: wrap; column-gap: 8px; }
 .bubble-footer.with-reactions .message-reactions { flex: 0 1 auto; min-width: 0; margin-top: 2px; }
 .bubble-footer.with-reactions .chat-bubble-meta { margin-left: auto; }
-.reaction-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: rgba(100,115,150,.18); color: inherit; font: inherit; font-size: var(--text-12); cursor: pointer; }
+.reaction-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: rgba(100,115,150,.18); color: inherit; font: inherit; font-size: var(--text-12); cursor: pointer; animation: reaction-chip-in .2s ease-out both; transform-origin: left center; }
+@keyframes reaction-chip-in { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .reaction-chip { animation: none; } }
 .reaction-chip.mine { background: rgba(74,99,240,.3); }
 @media (prefers-reduced-motion: reduce) { .mm-extra, .mm-extra:not(.open) { transition: none; } }
 </style>

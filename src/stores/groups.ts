@@ -14,6 +14,10 @@ export const useGroupsStore = defineStore('groups', () => {
     const groupMembers = ref<GroupMember[]>([]);
     const groupProfiles = ref<Map<string, UserProfile>>(new Map());
     const isGroupLoading = ref(false);
+    const membershipStatus = ref<'loading' | 'member' | 'not-member' | 'error'>('loading');
+    const membershipError = ref('');
+    const isJoining = ref(false);
+    let membershipRequest = 0;
     const pinnedGroupMessages = ref<Message[]>([]);
     const activeGroupPinIndex = ref(0);
     const newlyAddedId = ref<string | number | null>(null);
@@ -79,6 +83,8 @@ export const useGroupsStore = defineStore('groups', () => {
             openSequence++;
             groupLoadSeq++;
             activeGroup.value = null;
+            membershipRequest++;
+            membershipStatus.value = 'loading';
             groupMembers.value = [];
             groupMessages.value = [];
             groupProfiles.value.clear();
@@ -102,6 +108,7 @@ export const useGroupsStore = defineStore('groups', () => {
     }, { deep: true, flush: 'sync' });
     async function openGroup(group: Group) {
         const seq = ++openSequence;
+        membershipStatus.value = 'loading';
         if (activeGroup.value) {
             memberCache.set(String(activeGroup.value.id), groupMembers.value.slice());
             groupMessageCache.set(String(activeGroup.value.id), groupMessages.value.slice());
@@ -113,11 +120,57 @@ export const useGroupsStore = defineStore('groups', () => {
         await Promise.all([
             loadGroupMembers(group.id),
             loadGroupMessages(group.id),
+            checkMembership(group.id),
         ]);
         if (seq !== openSequence || String(activeGroup.value?.id) !== String(group.id))
             return;
         subscribeToGroupRealtime(group.id);
         isGroupLoading.value = false;
+    }
+    async function checkMembership(groupId = activeGroup.value?.id) {
+        const userId = authStore.user?.id;
+        const request = ++membershipRequest;
+        if (!groupId || !userId) return;
+        membershipStatus.value = 'loading';
+        membershipError.value = '';
+        try {
+            const { data, error } = await tablesApi.groupMembers.getMembership(groupId, userId);
+            let isMember: boolean;
+            if (error) {
+                const fallback = await tablesApi.groupMembers.getUserGroups(userId);
+                if (fallback.error) throw error;
+                isMember = (fallback.data || []).some((row: any) => String(row.groups?.id) === String(groupId));
+            } else {
+                isMember = !!data?.length;
+            }
+            if (request === membershipRequest && activeGroup.value?.id === groupId && authStore.user?.id === userId) {
+                membershipStatus.value = isMember ? 'member' : 'not-member';
+                return isMember;
+            }
+        } catch (error: any) {
+            console.error('[Groups] membership check:', error);
+            if (request === membershipRequest && activeGroup.value?.id === groupId && authStore.user?.id === userId) {
+                membershipStatus.value = 'error';
+                membershipError.value = error?.message || 'Ошибка соединения';
+            }
+        }
+    }
+    async function joinGroup() {
+        const userId = authStore.user?.id, group = activeGroup.value;
+        if (!userId || !group || isJoining.value || membershipStatus.value !== 'not-member') return;
+        isJoining.value = true;
+        try {
+            const { error } = await tablesApi.groupMembers.insertMembers([{ group_id: group.id, user_id: userId, role: 'member' }]);
+            if (error) throw error;
+            if (activeGroup.value?.id !== group.id || authStore.user?.id !== userId) return;
+            if (!await checkMembership(group.id)) throw new Error('Не удалось подтвердить вступление');
+            await Promise.all([loadGroupMembers(group.id), loadUserGroups()]);
+            const notice = await tablesApi.groupMessages.insert({ group_id: group.id, sender_id: userId, content: `svc::${JSON.stringify({ t: 'join' })}`, reply_to: null });
+            if (notice.error) console.error('[Groups] join notice:', notice.error);
+            else if (notice.data && activeGroup.value?.id === group.id && !groupMessages.value.some(m => String(m.id) === String(notice.data.id))) groupMessages.value.push(notice.data as Message);
+        } finally {
+            isJoining.value = false;
+        }
     }
     async function loadGroupMembers(groupId: string) {
         try {
@@ -243,8 +296,10 @@ export const useGroupsStore = defineStore('groups', () => {
             }
         })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => {
-            if (String(activeGroup.value?.id) === String(groupId))
+            if (String(activeGroup.value?.id) === String(groupId)) {
                 void loadGroupMembers(groupId);
+                if (!isJoining.value) void checkMembership(groupId);
+            }
         })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'group_reactions', filter: `group_id=eq.${groupId}` }, () => {
             if (String(activeGroup.value?.id) === String(groupId))
@@ -255,6 +310,7 @@ export const useGroupsStore = defineStore('groups', () => {
     async function sendGroupMessage(content: string, replyToId?: string | number | null) {
         if (!authStore.user?.id || !activeGroup.value)
             return;
+        if (membershipStatus.value !== 'member') throw new Error('Сначала вступите в группу');
         const myId = authStore.user.id;
         const groupId = activeGroup.value.id;
         const tempId = `temp_grp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -428,6 +484,11 @@ export const useGroupsStore = defineStore('groups', () => {
         groupMembers,
         groupProfiles,
         isGroupLoading,
+        membershipStatus,
+        membershipError,
+        isJoining,
+        checkMembership,
+        joinGroup,
         pinnedGroupMessages,
         activeGroupPinIndex,
         totalGroupUnread,

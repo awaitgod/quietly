@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onUnmounted, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import type { Message, UserProfile } from '../../types'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
 import { useAuthStore } from '../../stores/auth'
+import { useAudioStore } from '../../stores/audio'
 import MessageItem from './MessageItem.vue'
 import SolarIcon from '../common/SolarIcon.vue'
+import { readChatScroll, saveChatScroll } from '../../utils/chatScroll'
 
 const props = defineProps<{
   messages: Message[]
@@ -15,6 +17,8 @@ const props = defineProps<{
   selectedIds?: Set<string | number>
   isSelectionMode?: boolean
   composerHeight?: number
+  conversationId: string
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +35,7 @@ const emit = defineEmits<{
 const chatStore = useChatStore()
 const groupsStore = useGroupsStore()
 const authStore = useAuthStore()
+const audioStore = useAudioStore()
 const highlightedId = ref<string | null>(null)
 let highlightTimer: ReturnType<typeof setTimeout> | undefined
 const messagesById = computed(() => new Map(props.messages.map(m => [String(m.id), m])))
@@ -42,6 +47,84 @@ function authorOf(message?: Message) {
 
 const parentRef = ref<HTMLElement | null>(null)
 const showScrollBottom = ref(false)
+const scrollUserId = authStore.user?.id || ''
+const scrollConversationId = props.conversationId
+const savedPosition = scrollUserId ? readChatScroll(scrollUserId, scrollConversationId) : null
+const restoringPosition = ref(true)
+let restoreStarted = false
+let restoreFrame = 0
+let scrollSaveTimer: ReturnType<typeof setTimeout> | undefined
+function savePosition() {
+  if (restoringPosition.value || !scrollUserId || !parentRef.value) return
+  const container = parentRef.value
+  if (container.scrollHeight - container.clientHeight - container.scrollTop < 40) {
+    saveChatScroll(scrollUserId, scrollConversationId, { atBottom: true })
+    return
+  }
+  const top = container.getBoundingClientRect().top
+  const row = Array.from(container.querySelectorAll<HTMLElement>('[data-message-id]')).find(item => item.getBoundingClientRect().bottom > top)
+  if (row?.dataset.messageId) saveChatScroll(scrollUserId, scrollConversationId, { atBottom: false, messageId: row.dataset.messageId, offset: row.getBoundingClientRect().top - top })
+}
+function cancelRestoration() {
+  if (restoreFrame) cancelAnimationFrame(restoreFrame)
+  restoreFrame = 0
+  restoringPosition.value = false
+  restoreStarted = true
+}
+function onUserScrollStart() { stopPreservingScroll(); cancelRestoration() }
+async function restorePosition() {
+  if (restoreStarted || props.loading || !parentRef.value || !props.messages.length) return
+  restoreStarted = true
+  if (!savedPosition || savedPosition.atBottom) {
+    scrollToBottom(false)
+    await nextTick()
+    restoreFrame = requestAnimationFrame(() => { restoreFrame = 0; restoringPosition.value = false; handleScroll() })
+    return
+  }
+  const index = props.messages.findIndex(message => String(message.id) === savedPosition.messageId)
+  if (index < 0) { scrollToBottom(false); await nextTick(); restoreFrame = requestAnimationFrame(() => { restoreFrame = 0; restoringPosition.value = false; handleScroll() }); return }
+  rowVirtualizer.value.scrollToIndex(index, { align: 'start', behavior: 'auto' })
+  await nextTick()
+  const started = performance.now()
+  let stableFrames = 0
+  const align = () => {
+    const container = parentRef.value
+    if (!container || !restoringPosition.value) return
+    const row = Array.from(container.querySelectorAll<HTMLElement>('[data-message-id]')).find(item => item.dataset.messageId === savedPosition.messageId)
+    if (row) {
+      const delta = row.getBoundingClientRect().top - container.getBoundingClientRect().top - savedPosition.offset
+      container.scrollTop += delta
+      stableFrames = Math.abs(delta) < 1 ? stableFrames + 1 : 0
+    }
+    if (stableFrames < 3 && performance.now() - started < 500) restoreFrame = requestAnimationFrame(align)
+    else { restoreFrame = 0; restoringPosition.value = false; handleScroll() }
+  }
+  restoreFrame = requestAnimationFrame(align)
+}
+watch(() => [props.loading, props.messages.length] as const, () => { void nextTick(restorePosition) })
+function onPageHide() { if (scrollSaveTimer) clearTimeout(scrollSaveTimer); savePosition() }
+onBeforeUnmount(() => { onPageHide(); if (restoreFrame) cancelAnimationFrame(restoreFrame) })
+let preserveFrame = 0
+function stopPreservingScroll() { if (preserveFrame) cancelAnimationFrame(preserveFrame); preserveFrame = 0 }
+watch(() => audioStore.isNowPlayingStripVisible, () => {
+  stopPreservingScroll()
+  const container = parentRef.value
+  if (!container) return
+  const top = container.getBoundingClientRect().top
+  const row = Array.from(container.querySelectorAll<HTMLElement>('[data-index]')).find(item => item.getBoundingClientRect().bottom > top)
+  if (!row) return
+  const index = row.dataset.index
+  const initialTop = row.getBoundingClientRect().top
+  const started = performance.now()
+  const preserve = () => {
+    if (parentRef.value !== container || !row.isConnected || row.dataset.index !== index) { preserveFrame = 0; return }
+    container.scrollTop += row.getBoundingClientRect().top - initialTop
+    if (performance.now() - started < 360) preserveFrame = requestAnimationFrame(preserve)
+    else preserveFrame = 0
+  }
+  preserveFrame = requestAnimationFrame(preserve)
+}, { flush: 'sync' })
+onUnmounted(stopPreservingScroll)
 
 // Telegram Grouping Logic
 function isSameCluster(m1?: Message, m2?: Message): boolean {
@@ -135,7 +218,7 @@ watch(
   (newLen) => {
     const isAppend = newLen === prevLength + 1
     prevLength = newLen
-    if (!showScrollBottom.value) {
+    if (!restoringPosition.value && !showScrollBottom.value) {
       nextTick(() => scrollToBottom(isAppend))
     }
   }
@@ -167,6 +250,10 @@ function handleScroll() {
   const { scrollTop, scrollHeight, clientHeight } = parentRef.value
   const distFromBottom = scrollHeight - (scrollTop + clientHeight)
   showScrollBottom.value = distFromBottom > 240
+  if (!restoringPosition.value) {
+    if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
+    scrollSaveTimer = setTimeout(savePosition, 150)
+  }
 }
 
 function scrollToMessage(id: string | number) {
@@ -182,13 +269,16 @@ function scrollToMessage(id: string | number) {
 defineExpose({ scrollToBottom, scrollToMessage })
 
 onMounted(() => {
-  scrollToBottom(false)
+  window.addEventListener('pagehide', onPageHide)
+  void nextTick(restorePosition)
 })
+onUnmounted(() => window.removeEventListener('pagehide', onPageHide))
 </script>
 
 <template>
   <div class="message-list-area">
-  <div ref="parentRef" class="message-virtual-container" :style="{ paddingBottom: `${(composerHeight || 0) + 16}px` }" tabindex="0" role="region" aria-label="История сообщений" @scroll="handleScroll">
+  <div v-if="restoringPosition" class="history-loading" role="status">Загружаем сообщения…</div>
+  <div ref="parentRef" class="message-virtual-container" :class="{ 'is-restoring': restoringPosition }" :style="{ paddingBottom: `${(composerHeight || 0) + 16}px` }" tabindex="0" role="region" aria-label="История сообщений" @scroll="handleScroll" @wheel="onUserScrollStart" @pointerdown="onUserScrollStart" @touchstart="onUserScrollStart">
     <div
       class="virtual-track"
       :style="{
@@ -201,6 +291,7 @@ onMounted(() => {
         v-for="virtualRow in rowVirtualizer.getVirtualItems()"
         :key="String(virtualRow.key)"
         :data-index="virtualRow.index"
+        :data-message-id="String(messages[virtualRow.index].id)"
         :ref="(el) => rowVirtualizer.measureElement(el as HTMLElement)"
         :style="{
           position: 'absolute',
@@ -240,7 +331,7 @@ onMounted(() => {
   </div>
     <!-- Floating Jump To Bottom Button -->
     <button
-      v-if="showScrollBottom"
+      v-if="showScrollBottom && !restoringPosition"
       type="button"
       class="scroll-bottom-btn"
       aria-label="Вниз"
@@ -254,6 +345,8 @@ onMounted(() => {
 
 <style scoped>
 .message-list-area { flex: 1; min-height: 0; position: relative; }
+.history-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: var(--text-14); pointer-events: none; }
+.message-virtual-container.is-restoring { visibility: hidden; }
 .message-virtual-container {
   height: 100%;
   width: 100%;

@@ -5,6 +5,8 @@ import { useSettingsStore } from '../../stores/settings'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
 import { useAuthStore } from '../../stores/auth'
+import { useAudioStore } from '../../stores/audio'
+import type { AudioTrack } from '../../types'
 import { useContactsStore } from '../../stores/contacts'
 import GiftGallery from '../common/GiftGallery.vue'
 import { FAV_ID } from '../../services/supabase'
@@ -17,12 +19,30 @@ const settings = useSettingsStore()
 const chat = useChatStore()
 const groups = useGroupsStore()
 const auth = useAuthStore()
+const audio = useAudioStore()
 const contacts = useContactsStore()
 const blockBusy = ref(false)
 const blockError = ref('')
 const emit = defineEmits<{ (e: 'send-gift', recipient: { id: string; name: string }): void }>()
 const copied = ref(false)
 const user = computed(() => settings.viewedUser)
+const favoriteTrack = ref<AudioTrack | null>(null)
+let trackRequest = 0
+watch(() => user.value?.id, async id => {
+  const request = ++trackRequest
+  favoriteTrack.value = null
+  if (!id || id === FAV_ID) return
+  const track = await audio.loadUserFavoriteTrack(id)
+  if (request === trackRequest) favoriteTrack.value = track
+}, { immediate: true })
+function playProfileTrack() {
+  const track = favoriteTrack.value
+  if (!track) return
+  if (audio.currentTrack?.audio_url === track.audio_url) { audio.togglePlay(); return }
+  let index = audio.tracks.findIndex(item => item.audio_url === track.audio_url)
+  if (index < 0) { audio.tracks.push({ ...track, transient: true }); index = audio.tracks.length - 1 }
+  audio.playTrack(index)
+}
 const group = computed(() => !user.value ? groups.activeGroup : null)
 watch(() => user.value?.id, (id, oldId) => { if (oldId) presence.unwatchUser(oldId); if (id) presence.watchUser(id) }, { immediate: true })
 onUnmounted(() => { if (user.value?.id) presence.unwatchUser(user.value.id) })
@@ -107,12 +127,24 @@ async function copyUsername() {
       </div>
       <button v-if="user && !favorite && user.id !== auth.user?.id" type="button" class="block-user" :disabled="blockBusy" @click="toggleBlocked">{{ contacts.blockedIds.has(user.id) ? 'Разблокировать пользователя' : 'Заблокировать пользователя' }}</button>
       <p v-if="blockError" class="block-error" role="alert">{{ blockError }}</p>
+      <div v-if="favoriteTrack" class="profile-track">
+        <img v-if="favoriteTrack.cover_url" :src="favoriteTrack.cover_url" alt="" class="profile-track-cover" />
+        <span v-else class="profile-track-cover"><SolarIcon name="music-notes-linear" :size="20" /></span>
+        <span class="profile-track-info"><strong>{{ favoriteTrack.title }}</strong><small>{{ favoriteTrack.artist }}</small></span>
+        <button type="button" class="profile-track-play" :aria-label="audio.isPlaying && audio.currentTrack?.audio_url === favoriteTrack.audio_url ? 'Приостановить' : 'Воспроизвести'" @click="playProfileTrack"><SolarIcon :name="audio.isPlaying && audio.currentTrack?.audio_url === favoriteTrack.audio_url ? 'pause-circle-bold' : 'play-circle-bold'" :size="24" /></button>
+      </div>
       <GiftGallery v-if="user && !favorite" :user-id="user.id" />
     </div>
   </section>
 </template>
 
 <style scoped>
+.profile-track { display: flex; align-items: center; gap: 12px; padding: 14px; margin-top: 14px; border-radius: 16px; background: var(--surface); }
+.profile-track-cover { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #0a84ff; color: white; }
+.profile-track-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.profile-track-info strong, .profile-track-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-track-info small { color: var(--muted); }
+.profile-track-play { border: 0; padding: 8px; background: transparent; color: #63aaff; cursor: pointer; }
 .block-user { margin-top:14px; padding:8px 0; border:0; background:transparent; color:#e2596a; font:inherit; font-size:var(--text-13); cursor:pointer; }
 .block-user:disabled { opacity:.5; cursor:default; }
 .block-error { color:#e2596a; font-size:var(--text-13); }
