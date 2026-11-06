@@ -565,7 +565,6 @@ html.np-on #loggedInScreen.chat-open{top:calc(var(--vv-top,0px) + 36px);height:c
 .tk-cb{width:52px;height:52px;border:none;border-radius:50%;background:#242429;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s}
 .tk-cb:active{transform:scale(.92)}
 .tk-cb svg{width:22px;height:22px}
-.tk-cb.nx svg{transform:scaleX(-1)}
 .tk-cb.big{width:68px;height:68px;background:#fff;color:#000}
 .tk-cb.big svg{width:28px;height:28px}
 .tk-sheet{position:relative}

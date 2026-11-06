@@ -214,7 +214,6 @@ function scrollToMessageId(id: string | number) {
 
 .reaction-notice { position:absolute; top:72px; left:50%; transform:translateX(-50%); z-index:30; padding:var(--space-3) var(--space-4); border-radius:var(--radius-md); background:var(--surface); color:var(--text); box-shadow:0 8px 24px rgba(0,0,0,.25); font-size:var(--text-14); }
 .composer-overlay { position: absolute; left: 0; right: 0; bottom: 0; z-index: 20; pointer-events: none; }
-.composer-overlay::before { content: ''; position: absolute; inset: -24px 0 0; background: linear-gradient(to top, var(--bg) 0%, var(--bg) 35%, transparent 100%); pointer-events: none; }
 .composer-overlay :deep(.chat-input-wrapper) { pointer-events: auto; }
 .chat-view {
   display: flex;

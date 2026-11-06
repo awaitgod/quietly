@@ -130,8 +130,8 @@ async function copyUsername() {
 h1 { margin: 12px 0 0; color: var(--text); font-size: 20px; font-weight: 700; line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
 .profile-subtitle.online { color: #3b82f6; }
 .profile-subtitle { margin: 3px 0 0; color: var(--muted); font-size: var(--text-13); }
-.gift-action { position: static; flex: none; }
-.profile-actions { display: flex; gap: var(--space-2); align-items: flex-end; margin-top: 14px; }
+.gift-action { position: static; flex: none; width: 42px; height: auto; min-height: 42px; }
+.profile-actions { display: flex; gap: var(--space-2); align-items: stretch; margin-top: 14px; }
 .write-button { flex: 1; min-width: 0; width: 100%; min-height: 42px; border: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: var(--space-2); background: var(--text); color: var(--bg); font: inherit; font-size: var(--text-14); font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
 .write-button:hover { opacity: 0.9; }
 .profile-info-card { width: 100%; margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: var(--surface); }

@@ -208,8 +208,13 @@ export const useGroupsStore = defineStore('groups', () => {
                 if (data)
                     groupProfiles.value.set(data.id, data as UserProfile);
             }
-            if (!groupMessages.value.some(m => String(m.id) === String(newMsg.id)))
+            if (!groupMessages.value.some(m => String(m.id) === String(newMsg.id))) {
+                if (newMsg.sender_id !== authStore.user?.id) {
+                    newlyAddedId.value = newMsg.id;
+                    setTimeout(() => { if (newlyAddedId.value === newMsg.id) newlyAddedId.value = null; }, 800);
+                }
                 groupMessages.value.push(newMsg);
+            }
             tauriSaveMessage(newMsg, `grp:${groupId}`);
             if (newMsg.sender_id !== authStore.user?.id) {
                 tauriNotify(activeGroup.value?.name || 'Группа', newMsg.content);

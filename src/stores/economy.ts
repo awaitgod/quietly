@@ -81,6 +81,30 @@ export const useEconomyStore = defineStore('economy', () => {
             return null;
         }
     }
+    async function addTestCoins() {
+        const userId = authStore.user?.id;
+        if (!userId) throw new Error('Необходимо войти в аккаунт');
+        const code = `TEST${Array.from(crypto.getRandomValues(new Uint8Array(12)), byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+        let created;
+        try {
+            created = await rpcApi.admin.createPromo(code, 1000, 1);
+        } catch (error: any) {
+            if (/forbidden|permission|not authorized/i.test(error?.message || '')) throw new Error('Для создания промокода нужны права администратора');
+            throw error;
+        }
+        if (created && typeof created === 'object' && (created.ok === false || created.error)) {
+            throw new Error(created.error || 'Не удалось создать промокод');
+        }
+        if (authStore.user?.id !== userId) throw new Error('Аккаунт изменился. Начисление отменено.');
+        try {
+            const result = await rpcApi.redeemPromo(code);
+            if (!result?.ok) throw new Error(result?.error || 'Сервер отклонил промокод');
+            if (authStore.user?.id === userId && authStore.profile && result.balance != null) authStore.profile.qcoin = Number(result.balance);
+            showCoinToast(Number(result.amount) || 1000);
+        } catch (error: any) {
+            throw new Error(`Промокод ${code} создан, но не активирован: ${error?.message || 'ошибка сети'}`);
+        }
+    }
     async function checkPaymentStatus(paymentId: string) {
         try {
             const { data, error } = await tablesApi.payments.checkPaymentStatus(paymentId);
@@ -212,6 +236,7 @@ export const useEconomyStore = defineStore('economy', () => {
         showCoinToast,
         redeemPromo,
         createTopupPayment,
+        addTestCoins,
         checkPaymentStatus,
         loadGiftStock,
         loadUserGifts,

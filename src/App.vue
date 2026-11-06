@@ -265,8 +265,9 @@ function onCropped(blob: Blob) {
   display: flex;
   position: relative;
   overflow: hidden;
-  background-color: var(--bg);
+  background: #0d0d0f url('/chat-background-dark.svg') center / cover no-repeat;
 }
+:global(html[data-theme="light"] .quietly-app) { background-image: linear-gradient(rgba(255, 255, 255, .85), rgba(255, 255, 255, .85)), url('/chat-background-light.svg'); background-color: #fff; }
 
 #loggedInScreen {
   width: 100%;
@@ -325,7 +326,7 @@ function onCropped(blob: Blob) {
     inset: 0;
     width: 100vw;
     height: 100vh;
-    background-color: var(--bg);
+    background-color: transparent;
   }
 
   .chats-sidebar {
@@ -338,7 +339,7 @@ function onCropped(blob: Blob) {
     padding: 0 !important;
     margin: 0 !important;
     border-right: none;
-    background: var(--bg);
+    background: transparent;
   }
 
   .active-pane {
@@ -350,7 +351,7 @@ function onCropped(blob: Blob) {
     overflow: hidden;
     padding: 0 !important;
     margin: 0 !important;
-    background: var(--bg);
+    background: transparent;
   }
 
   .chat-empty-desktop {
@@ -388,8 +389,12 @@ function onCropped(blob: Blob) {
 
 .gift-toast {
   position: fixed;
+  top: auto;
   bottom: 30px;
   left: 50%;
+  height: auto;
+  width: max-content;
+  max-width: calc(100vw - 32px);
   transform: translateX(-50%) translateY(30px);
   background-color: rgba(36, 36, 41, 0.95);
   backdrop-filter: blur(12px);

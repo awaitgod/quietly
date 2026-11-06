@@ -3,6 +3,17 @@
 @import './assets/styles/patches.css';
 @import './assets/styles/light-refinements.css';
 
+html:not([data-theme="light"]) body .chat-bubble-row.mine .chat-bubble:not(.sticker-bubble) {
+  background: linear-gradient(135deg, #486db2, #38579e);
+  color: #fff;
+}
+html:not([data-theme="light"]) body .chat-bubble-row:not(.mine) .chat-bubble:not(.sticker-bubble) {
+  background: linear-gradient(135deg, #282630, #211f29);
+  color: #fff;
+}
+html:not([data-theme="light"]) body .chat-bubble-row.mine .chat-bubble:not(.sticker-bubble) .chat-bubble-meta { color: #d6e4ff; }
+html:not([data-theme="light"]) body .chat-bubble-row.mine .chat-bubble:not(.sticker-bubble) .bubble-tick.read { color: #d6e4ff; }
+
 /* Desktop Messenger App Reset & Enhancements */
 *, *::before, *::after {
   box-sizing: border-box;

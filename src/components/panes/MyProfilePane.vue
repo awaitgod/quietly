@@ -3,12 +3,14 @@ import GiftGallery from '../common/GiftGallery.vue'
 import { computed, ref } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useAudioStore } from '../../stores/audio'
+import { useSettingsStore } from '../../stores/settings'
 import SolarIcon from '../common/SolarIcon.vue'
 import EmojiText from '../common/EmojiText.vue'
 
 const emit = defineEmits<{ (e: 'edit-profile'): void; (e: 'open-accounts'): void; (e: 'open-topup'): void; (e: 'open-promo'): void }>()
 const auth = useAuthStore()
 const audio = useAudioStore()
+const settings = useSettingsStore()
 const profile = computed(() => auth.profile)
 const favTrack = computed(() => audio.tracks.find(t => t.is_favorite))
 const copied = ref(false)
@@ -23,7 +25,7 @@ async function copyUsername() {
   <section v-if="profile" class="own-profile" aria-label="Мой профиль">
     <div class="own-content">
       <div class="own-hero">
-        <div class="own-avatar"><img v-if="profile.avatar_url" :src="profile.avatar_url" alt="" /><span v-else>{{ profile.name.charAt(0).toUpperCase() }}</span></div>
+        <button type="button" class="own-avatar" :class="{ 'has-photo': profile.avatar_url }" :disabled="!profile.avatar_url" aria-label="Открыть фотографию профиля" @click="profile.avatar_url && settings.openImagePreview(profile.avatar_url, profile.name)"><img v-if="profile.avatar_url" :src="profile.avatar_url" alt="" /><span v-else>{{ profile.name.charAt(0).toUpperCase() }}</span></button>
         <h1><EmojiText :text="profile.name" /></h1>
       </div>
       <button type="button" class="own-account-switch" @click="emit('open-accounts')"><SolarIcon name="users-group-rounded-linear" :size="20" /> Аккаунты <SolarIcon name="alt-arrow-right-linear" :size="18" /></button>
@@ -57,6 +59,7 @@ async function copyUsername() {
 .own-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .own-avatar { width: 160px; height: 160px; border-radius: 50%; overflow: hidden; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 64px; font-weight: 700; }
 .own-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.own-avatar.has-photo { cursor: pointer; }
 h1 { margin: var(--space-4) 0 0; color: var(--text); font-size: var(--text-24); line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
 .own-account-switch { width:100%; margin-top:24px; padding:14px 16px; display:flex; align-items:center; gap:10px; border:0; border-radius:16px; background:var(--surface); color:var(--text); font:inherit; font-weight:600; cursor:pointer; }
 .own-account-switch svg:last-child { margin-left:auto; color:var(--muted); }

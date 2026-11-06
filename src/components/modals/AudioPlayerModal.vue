@@ -42,6 +42,8 @@ function handleSeek(e: Event) {
           :max="audioStore.duration || 100"
           step="0.1"
           :value="audioStore.currentTime"
+          :style="{ '--p': `${audioStore.duration ? Math.min(100, Math.max(0, audioStore.currentTime / audioStore.duration * 100)) : 0}%` }"
+          aria-label="Позиция воспроизведения"
           @input="handleSeek"
         />
         <div class="tk-times">

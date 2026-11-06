@@ -5,7 +5,7 @@ const economyStore = useEconomyStore()
 import EmojiText from '../common/EmojiText.vue'
 import { emojiHtml } from '../../utils/emoji'
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import type {
   Message,
   UserProfile,
@@ -67,31 +67,6 @@ const resolvedText = ref('')
 const isKeyEncrypted = ref(false)
 const isLockedEncrypted = ref(false)
 
-watch(
-  [() => props.message.content, () => settingsStore.encryptionKey],
-  async ([msgContent, key]: [string, string]) => {
-    let raw = msgContent
-    if (isForward.value && forwardPayload.value) {
-      raw = forwardPayload.value.c
-    }
-    if (isEncryptedMessage(raw)) {
-      isKeyEncrypted.value = true
-      const res = await decryptText(raw, key)
-      if (res.status === 'decrypted') {
-        resolvedText.value = res.text
-        isLockedEncrypted.value = false
-      } else {
-        resolvedText.value = 'Текст зашифрован'
-        isLockedEncrypted.value = true
-      }
-    } else {
-      isKeyEncrypted.value = false
-      isLockedEncrypted.value = false
-      resolvedText.value = raw
-    }
-  },
-  { immediate: true }
-)
 
 const isMine = computed(() => {
   return props.message.sender_id === authStore.user?.id
@@ -135,6 +110,38 @@ const forwardPayload = computed<ForwardContentPayload | null>(() => {
     return null
   }
 })
+
+watch(
+  [() => props.message.content, () => settingsStore.encryptionKey],
+  async ([msgContent, key]: [string, string], _old, onCleanup) => {
+    let stale = false
+    onCleanup(() => { stale = true })
+    let raw = msgContent
+    if (isForward.value && forwardPayload.value) {
+      raw = forwardPayload.value.c
+    }
+    if (isEncryptedMessage(raw)) {
+      isKeyEncrypted.value = true
+      isLockedEncrypted.value = true
+      resolvedText.value = 'Текст зашифрован'
+      const res = await decryptText(raw, key)
+      if (stale) return
+      if (res.status === 'decrypted') {
+        resolvedText.value = res.text
+        isLockedEncrypted.value = false
+      } else {
+        resolvedText.value = 'Текст зашифрован'
+        isLockedEncrypted.value = true
+      }
+    } else {
+      isKeyEncrypted.value = false
+      isLockedEncrypted.value = false
+      resolvedText.value = raw
+    }
+  },
+  { immediate: true }
+)
+
 
 // 4. Gift check (gift::)
 const isGift = computed(() => {
@@ -293,6 +300,43 @@ const reactionGroups = computed(() => {
   }
   return [...counts.values()]
 })
+const bubbleElement = ref<HTMLElement | null>(null)
+let bubbleResizeAnimation: Animation | undefined
+watch(() => reactionGroups.value.map(reaction => `${reaction.emoji}:${reaction.count}`).join('|'), async () => {
+  const bubble = bubbleElement.value
+  if (!bubble || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const before = bubble.getBoundingClientRect()
+  bubbleResizeAnimation?.cancel()
+  await nextTick()
+  if (bubbleElement.value !== bubble) return
+  const after = bubble.getBoundingClientRect()
+  if (Math.abs(before.height - after.height) < 1 && Math.abs(before.width - after.width) < 1) return
+  bubbleResizeAnimation = bubble.animate(
+    [{ width: `${before.width}px`, height: `${before.height}px` }, { width: `${after.width}px`, height: `${after.height}px` }],
+    { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' },
+  )
+}, { flush: 'pre' })
+const reactionEffect = ref<{ emoji: string; x: number; y: number; id: number; image?: string } | null>(null)
+const quickReactionEffects: Record<string, string> = {
+  '👍': 'thumbs-up.webp', '❤': 'heart.webp', '🔥': 'fire.webp', '👎': 'thumbs-down.webp', '🥰': 'smiling-hearts.webp',
+}
+let reactionEffectTimer: ReturnType<typeof setTimeout> | undefined
+let reactionEffectId = 0
+const myReaction = computed(() => {
+  const reactions = props.message.reactions
+  const userId = authStore.user?.id
+  if (!userId || !reactions) return ''
+  return Array.isArray(reactions) ? reactions.find(item => item.user_id === userId)?.emoji || '' : reactions[userId] || ''
+})
+watch(myReaction, (emoji, previous) => {
+  if (!emoji || emoji === previous || !bubbleElement.value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const rect = bubbleElement.value.getBoundingClientRect()
+  const file = quickReactionEffects[emoji.replace(/\uFE0F/g, '')]
+  reactionEffect.value = { emoji, x: Math.max(65, Math.min(window.innerWidth - 65, rect.left + rect.width / 2)), y: Math.max(65, Math.min(window.innerHeight - 65, rect.top + rect.height / 2)), id: ++reactionEffectId, image: file ? `${import.meta.env.BASE_URL}reaction-effects/${file}` : undefined }
+  if (reactionEffectTimer) clearTimeout(reactionEffectTimer)
+  reactionEffectTimer = setTimeout(() => { reactionEffect.value = null }, file ? 2880 : 1100)
+})
+onUnmounted(() => { if (reactionEffectTimer) clearTimeout(reactionEffectTimer); bubbleResizeAnimation?.cancel() })
 function onContextMenu(event: MouseEvent | KeyboardEvent) {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const x = event instanceof MouseEvent ? event.clientX : rect.right
@@ -397,6 +441,7 @@ function handleBubbleClick() {
       </div>
 
       <div
+        ref="bubbleElement"
         class="chat-bubble"
         :class="[
           { 'sticker-bubble': isSticker, 'gift-bubble': isGift, 'image-bubble': isImage, 'audio-bubble': isAudio },
@@ -479,6 +524,8 @@ function handleBubbleClick() {
         v-html="renderFormattedContent(displayContent)"
       ></div>
 
+      <div class="bubble-footer" :class="{ 'with-reactions': reactionGroups.length && !isSticker && !isGift }">
+      <div v-if="reactionGroups.length" class="message-reactions"><button v-for="reaction in reactionGroups" :key="reaction.emoji" type="button" class="reaction-chip" :class="{ mine: reaction.mine }" :aria-label="`${reaction.emoji}: ${reaction.count}`" :aria-pressed="reaction.mine" @click.stop="emit('reaction', { message, emoji: reaction.emoji })"><EmojiText :text="reaction.emoji" /><span>{{ reaction.count }}</span></button></div>
       <!-- Metadata (pin, edited, time, read ticks) -->
       <div class="chat-bubble-meta">
         <span v-if="message.pinned_at" class="bubble-pin">
@@ -494,10 +541,21 @@ function handleBubbleClick() {
           />
         </span>
       </div>
-      <div v-if="reactionGroups.length" class="message-reactions"><button v-for="reaction in reactionGroups" :key="reaction.emoji" type="button" class="reaction-chip" :class="{ mine: reaction.mine }" :aria-label="`${reaction.emoji}: ${reaction.count}`" :aria-pressed="reaction.mine" @click.stop="emit('reaction', { message, emoji: reaction.emoji })"><EmojiText :text="reaction.emoji" /><span>{{ reaction.count }}</span></button></div>
+      </div>
     </div>
   </div>
 
+    <Teleport to="body">
+      <div v-if="reactionEffect" :key="reactionEffect.id" class="reaction-effect" :style="{ left: `${reactionEffect.x}px`, top: `${reactionEffect.y}px` }" aria-hidden="true">
+        <img v-if="reactionEffect.image" class="reaction-effect-animation" :src="reactionEffect.image" alt="" @error="reactionEffect.image = undefined" />
+        <template v-else>
+        <span class="reaction-effect-ring"></span>
+        <span v-for="n in 12" :key="n" class="reaction-effect-particle" :style="{ '--angle': `${n * 30}deg`, '--distance': `${48 + (n % 3) * 14}px`, '--delay': `${(n % 3) * 25}ms` }"></span>
+        <span v-for="n in 4" :key="`emoji-${n}`" class="reaction-effect-mini" :style="{ '--angle': `${n * 90 + 45}deg` }"><EmojiText :text="reactionEffect.emoji" /></span>
+        </template>
+        <span class="reaction-effect-emoji"><EmojiText :text="reactionEffect.emoji" /></span>
+      </div>
+    </Teleport>
     <!-- Context Menu Modal -->
     <Teleport to="body"><Transition name="message-menu">
     <div v-if="isContextMenuOpen" class="msg-menu-overlay" @click.stop="isContextMenuOpen = false" @keydown.esc.stop="isContextMenuOpen = false">
@@ -590,6 +648,21 @@ function handleBubbleClick() {
 </template>
 
 <style scoped>
+.reaction-effect { position: fixed; z-index: 13000; width: 0; height: 0; pointer-events: none; }
+.reaction-effect-animation { position: absolute; width: 240px; height: 240px; max-width: none; left: -120px; top: -120px; object-fit: contain; }
+.reaction-effect-emoji, .reaction-effect-mini, .reaction-effect-ring, .reaction-effect-particle { position: absolute; left: 0; top: 0; }
+.reaction-effect-emoji { display: grid; place-items: center; width: 66px; height: 66px; margin: -33px; font-size: 58px; line-height: 1; animation: reaction-emoji-pop 1.05s cubic-bezier(.2,.8,.2,1) both; filter: drop-shadow(0 5px 9px rgba(0,0,0,.2)); }
+.reaction-effect-emoji :deep(.apple-emoji) { width: 100%; height: 100%; }
+.reaction-effect-mini { width: 22px; height: 22px; margin: -11px; font-size: 20px; line-height: 1; animation: reaction-mini-fly 900ms ease-out both; }
+.reaction-effect-mini :deep(.apple-emoji) { width: 100%; height: 100%; }
+.reaction-effect-particle { width: 7px; height: 7px; margin: -3.5px; border-radius: 50%; background: #ffd76b; box-shadow: 0 0 7px rgba(255,190,85,.6); animation: reaction-particle-fly 850ms ease-out var(--delay) both; }
+.reaction-effect-particle:nth-child(3n) { width: 5px; height: 5px; background: #ff9fbd; }
+.reaction-effect-particle:nth-child(3n + 1) { background: #a9b9ff; }
+.reaction-effect-ring { width: 45px; height: 45px; margin: -22.5px; border: 2px solid rgba(255,215,140,.8); border-radius: 50%; animation: reaction-ring 650ms ease-out both; }
+@keyframes reaction-emoji-pop { 0% { opacity: 0; transform: scale(.25) rotate(-18deg); } 32% { opacity: 1; transform: scale(1.18) rotate(9deg); } 53% { transform: scale(.95) rotate(-4deg); } 72% { opacity: 1; transform: scale(1) rotate(0); } 100% { opacity: 0; transform: translateY(-24px) scale(.75); } }
+@keyframes reaction-particle-fly { 0% { opacity: 0; transform: rotate(var(--angle)) translateX(18px) scale(.2); } 18% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--angle)) translateX(var(--distance)) scale(.4); } }
+@keyframes reaction-mini-fly { 0% { opacity: 0; transform: rotate(var(--angle)) translateX(16px) rotate(calc(-1 * var(--angle))) scale(.25); } 25% { opacity: .95; } 100% { opacity: 0; transform: rotate(var(--angle)) translateX(75px) rotate(calc(-1 * var(--angle))) scale(.7); } }
+@keyframes reaction-ring { from { opacity: .8; transform: scale(.4); } to { opacity: 0; transform: scale(2.5); } }
 :global(html[data-theme="light"]) .chat-bubble-row.mine .chat-bubble:not(.sticker-bubble) { background: #26262c; color: #fff; }
 :global(html[data-theme="light"]) .chat-bubble-row.mine .chat-bubble:not(.sticker-bubble) .chat-bubble-meta { color: #c5c5cc; }
 :global(html[data-theme="light"]) .chat-bubble-row:not(.mine) .chat-bubble .chat-bubble-meta { color: #686872; }
@@ -754,6 +827,9 @@ function handleBubbleClick() {
   animation: tgBubbleInTheirs 0.20s cubic-bezier(0.22, 1, 0.36, 1) both;
   transform-origin: bottom left;
   will-change: transform, opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-bubble-row .chat-bubble.anim-in { animation: none; }
 }
 
 @keyframes tgBubbleInMine {
@@ -924,7 +1000,7 @@ function handleBubbleClick() {
   color: inherit;
 }
 .chat-bubble-row.mine .msg-audio-title {
-  color: #111113;
+  color: inherit;
 }
 :global(html[data-theme="light"]) .chat-bubble-row.mine .msg-audio-title {
   color: #20222a;
@@ -942,7 +1018,7 @@ function handleBubbleClick() {
   opacity: 0.75;
 }
 .chat-bubble-row.mine .msg-audio-sub {
-  color: rgba(17, 17, 19, 0.7);
+  color: inherit;
 }
 :global(html[data-theme="light"]) .chat-bubble-row.mine .msg-audio-sub {
   color: #667080;
@@ -1198,6 +1274,10 @@ function handleBubbleClick() {
 .mm-extra:not(.open) { visibility: hidden; transition: grid-template-rows .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease, visibility 0s linear .22s; }
 .mm-rx { min-width: 0; min-height: 36px; }
 .message-reactions { display: flex; align-self: flex-start; justify-content: flex-start; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.bubble-footer { display: contents; }
+.bubble-footer.with-reactions { display: flex; align-items: end; flex-wrap: wrap; column-gap: 8px; }
+.bubble-footer.with-reactions .message-reactions { flex: 0 1 auto; min-width: 0; margin-top: 2px; }
+.bubble-footer.with-reactions .chat-bubble-meta { margin-left: auto; }
 .reaction-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: rgba(100,115,150,.18); color: inherit; font: inherit; font-size: var(--text-12); cursor: pointer; }
 .reaction-chip.mine { background: rgba(74,99,240,.3); }
 @media (prefers-reduced-motion: reduce) { .mm-extra, .mm-extra:not(.open) { transition: none; } }

@@ -237,6 +237,10 @@ export const useChatStore = defineStore('chat', () => {
         if (activeChat.value?.id === partnerId) {
             const exists = messages.value.some((m) => m.id === newMsg.id);
             if (!exists) {
+                if (newMsg.sender_id !== myId) {
+                    newlyAddedId.value = newMsg.id;
+                    setTimeout(() => { if (newlyAddedId.value === newMsg.id) newlyAddedId.value = null; }, 800);
+                }
                 messages.value.push(newMsg);
                 tauriSaveMessage(newMsg, partnerId);
             }

@@ -29,19 +29,6 @@ watch(initialLoadComplete, async (ready) => {
 
 const decryptedPreviews = ref<Record<string, string>>({})
 
-watch(
-  [() => combinedChatList.value, () => settingsStore.encryptionKey],
-  async ([chats, key]) => {
-    for (const chat of chats) {
-      const msg = chat.lastMessage
-      if (msg && isEncryptedMessage(msg.content)) {
-        const res = await decryptText(msg.content, key)
-        decryptedPreviews.value[msg.content] = res.status === 'decrypted' ? res.text : 'Текст зашифрован'
-      }
-    }
-  },
-  { immediate: true, deep: true }
-)
 
 function getLastMessagePreview(content: string): string {
   if (isEncryptedMessage(content)) {
@@ -86,6 +73,25 @@ const combinedChatList = computed(() => {
     return tB - tA
   })
 })
+
+watch(
+  [() => combinedChatList.value, () => settingsStore.encryptionKey],
+  async ([chats, key], _old, onCleanup) => {
+    let stale = false
+    onCleanup(() => { stale = true })
+    decryptedPreviews.value = {}
+    for (const chat of chats) {
+      const msg = chat.lastMessage
+      if (msg && isEncryptedMessage(msg.content)) {
+        const res = await decryptText(msg.content, key)
+        if (stale) return
+        decryptedPreviews.value[msg.content] = res.status === 'decrypted' ? res.text : 'Текст зашифрован'
+      }
+    }
+  },
+  { immediate: true, deep: true }
+)
+
 
 function formatChatTime(dateStr?: string) {
   if (!dateStr) return ''

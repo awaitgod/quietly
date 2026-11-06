@@ -292,6 +292,9 @@ function cancelContext() {
   color: #0f172a !important;
   background-color: rgba(15, 23, 42, 0.08) !important;
 }
+:global(html[data-theme="light"]) .chat-attach-btn:hover :deep(.solar-icon) {
+  color: #0f172a !important;
+}
 :global(html[data-theme="light"]) .chat-send-btn { background: #e1e1e6; color: #686872; }
 :global(html[data-theme="light"]) .chat-send-btn.active { background: #202026; color: #fff; }
 :global(html[data-theme="light"]) .chat-send-btn.active.encrypted {

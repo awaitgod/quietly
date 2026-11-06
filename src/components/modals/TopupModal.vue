@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import EmojiText from '../common/EmojiText.vue'
-
 import { ref } from 'vue'
 import { useEconomyStore } from '../../stores/economy'
 import SolarIcon from '../common/SolarIcon.vue'
@@ -10,28 +8,20 @@ const emit = defineEmits<{
 }>()
 
 const economyStore = useEconomyStore()
-const selectedPackage = ref<number | null>(null)
-const paymentMethod = ref<'sbp' | 'crypto'>('sbp')
-const isCreatingPayment = ref(false)
+const isAdding = ref(false)
 const errorMessage = ref('')
 
-async function handlePay() {
-  if (!selectedPackage.value) return
-  isCreatingPayment.value = true
+async function handleAdd() {
+  if (isAdding.value) return
+  isAdding.value = true
   errorMessage.value = ''
-
   try {
-    const url = await economyStore.createTopupPayment(selectedPackage.value, paymentMethod.value)
-    if (url) {
-      window.open(url, '_blank')
-      emit('close')
-    } else {
-      errorMessage.value = 'Оплата пока недоступна. Попробуйте позже.'
-    }
+    await economyStore.addTestCoins()
+    emit('close')
   } catch (err: any) {
-    errorMessage.value = err.message || 'Ошибка создания платежа'
+    errorMessage.value = err.message || 'Не удалось начислить Qcoin'
   } finally {
-    isCreatingPayment.value = false
+    isAdding.value = false
   }
 }
 </script>
@@ -46,45 +36,10 @@ async function handlePay() {
         </button>
       </div>
 
-      <div class="topup-body">
-        <div class="tu-list">
-          <button
-            v-for="pkg in economyStore.topupPackages"
-            :key="pkg.qcoins"
-            type="button"
-            class="tu-row"
-            :class="{ active: selectedPackage === pkg.qcoins }"
-            @click="selectedPackage = pkg.qcoins"
-          >
-            <span class="tu-coin"><EmojiText text="🪙" /></span>
-            <b>{{ pkg.qcoins.toLocaleString('ru-RU') }} Qcoin</b>
-            <span class="tu-price">{{ pkg.priceRub.toLocaleString('ru-RU') }} ₽</span>
-          </button>
-        </div>
-
-        <div v-if="selectedPackage" class="payment-methods">
-          <div class="pm-title">Способ оплаты:</div>
-          <label class="pm-radio">
-            <input v-model="paymentMethod" type="radio" value="sbp" />
-            <span><b>СБП</b> (QR-код или ссылка в банк)</span>
-          </label>
-          <label class="pm-radio">
-            <input v-model="paymentMethod" type="radio" value="crypto" />
-            <span><b>Криптовалюта</b> (USDT / TON / BTC)</span>
-          </label>
-        </div>
-
-        <div v-if="errorMessage" class="error-text">{{ errorMessage }}</div>
-      </div>
-
+      <div v-if="errorMessage" class="topup-body"><div class="error-text" role="alert">{{ errorMessage }}</div></div>
       <div class="topup-foot">
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="!selectedPackage || isCreatingPayment"
-          @click="handlePay"
-        >
-          {{ isCreatingPayment ? 'Создание платежа...' : 'Оплатить' }}
+        <button type="button" class="btn-primary" :disabled="isAdding" @click="handleAdd">
+          {{ isAdding ? 'Начисление…' : 'Добавить 1000 Qcoin на аккаунт' }}
         </button>
       </div>
     </div>

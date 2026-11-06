@@ -22,7 +22,6 @@ const logo = `${import.meta.env.BASE_URL}quietly-icon.png`
 }
 
 .loader-logo img { display: block; width: 96px; height: 96px; object-fit: contain; }
-.loader-logo img { filter: brightness(0) invert(1); }
 
 .loader-logo {
   animation: pulse 1.6s ease-in-out infinite;
