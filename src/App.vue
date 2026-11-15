@@ -221,7 +221,7 @@ function onCropped(blob: Blob) {
       <!-- Desktop Hamburger Menu (fixed top-left on >= 1024px) -->
       <DesktopMenu @open-create-group="isCreateGroupOpen = true" @open-accounts="isAccountSwitcherOpen = true" />
 
-      <!-- Left Column: Chats list (440px on Desktop) -->
+      <!-- Left Column: Chats list -->
       <aside class="chats-sidebar">
         <ChatList />
       </aside>
@@ -377,7 +377,7 @@ function onCropped(blob: Blob) {
 @media (min-width: 768px) {
   #loggedInScreen {
     display: grid !important;
-    grid-template-columns: 416px minmax(0, 1fr) !important;
+    grid-template-columns: 520px minmax(0, 1fr) !important;
     grid-template-rows: minmax(0, 1fr) !important;
     position: fixed;
     inset: 0;

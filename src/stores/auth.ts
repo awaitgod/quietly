@@ -165,9 +165,9 @@ export const useAuthStore = defineStore('auth', () => {
             await tablesApi.userDevices.upsertDevice({
                 user_id: myId,
                 device_id: devId,
-                name: 'Quietly Desktop (Windows)',
-                kind: 'Компьютер',
-                ua: navigator.userAgent || 'Quietly Desktop Windows 11',
+                name: /Android/i.test(navigator.userAgent) ? 'Quietly Android' : /Windows/i.test(navigator.userAgent) ? 'Quietly Windows' : /Macintosh/i.test(navigator.userAgent) ? 'Quietly macOS' : /Linux/i.test(navigator.userAgent) ? 'Quietly Linux' : 'Quietly',
+                kind: /Android|iPhone/i.test(navigator.userAgent) ? 'Телефон' : /iPad/i.test(navigator.userAgent) ? 'Планшет' : 'Компьютер',
+                ua: navigator.userAgent || '',
                 ip,
                 session_id: session?.access_token?.slice(0, 36) || null,
                 last_seen: new Date().toISOString(),
@@ -185,6 +185,13 @@ export const useAuthStore = defineStore('auth', () => {
             const myId = user.value.id;
             const now = new Date().toISOString();
             try {
+                const { data, error } = await tablesApi.userDevices.checkRevoked(myId, getOrCreateDeviceId());
+                if (error) throw error;
+                if (data?.revoked_at) {
+                    await logout();
+                    alert('Ваш сеанс был завершён на другом устройстве.');
+                    return;
+                }
                 await tablesApi.userDevices.updateLastSeen(myId, getOrCreateDeviceId(), now);
             }
             catch (e) {
@@ -235,15 +242,17 @@ export const useAuthStore = defineStore('auth', () => {
         }
         catch (err) {
             console.error('[Auth] loadDevices error:', err);
+            throw err;
         }
     }
     async function revokeDevice(deviceId: string) {
         try {
-            await rpcApi.revokeDeviceSession(deviceId);
+            if (!await rpcApi.revokeDeviceSession(deviceId)) throw new Error('Не удалось завершить сеанс');
             await loadDevices();
         }
         catch (err) {
             console.error('[Auth] revokeDevice error:', err);
+            throw err;
         }
     }
     async function terminateOtherSessions() {
@@ -251,11 +260,14 @@ export const useAuthStore = defineStore('auth', () => {
             return;
         const devId = getOrCreateDeviceId();
         try {
-            await tablesApi.userDevices.terminateOthers(user.value.id, devId);
+            for (const device of activeDevices.value.filter(d => d.device_id !== devId && !d.revoked_at)) {
+                if (!await rpcApi.revokeDeviceSession(device.device_id)) throw new Error('Не удалось завершить один из сеансов');
+            }
             await loadDevices();
         }
         catch (err) {
             console.error('[Auth] terminateOtherSessions error:', err);
+            throw err;
         }
     }
     function startOtpTimer(seconds = 60) {

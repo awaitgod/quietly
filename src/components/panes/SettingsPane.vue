@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import EmojiText from '../common/EmojiText.vue'
 
-import { ref, computed } from 'vue'
-import { useAuthStore } from '../../stores/auth'
+import { ref, computed, watch } from 'vue'
+import { useAuthStore, getOrCreateDeviceId } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
 import { useEconomyStore } from '../../stores/economy'
 import SolarIcon from '../common/SolarIcon.vue'
-import KillerFeaturesPane from './KillerFeaturesPane.vue'
+import EncryptionSettingsPane from './EncryptionSettingsPane.vue'
 import SecurityPane from './SecurityPane.vue'
 
 const emit = defineEmits<{
@@ -21,6 +21,42 @@ const settingsStore = useSettingsStore()
 const economyStore = useEconomyStore()
 
 const currentSubView = ref<'main' | 'look' | 'sec' | 'devices' | 'badges' | 'features'>('main')
+const devicesLoading = ref(false)
+const devicesError = ref('')
+const badgeError = ref('')
+const badgeBusy = ref(false)
+const badgeNames: Record<string, string> = { verified: 'Верификация', admin: 'Администратор', tester: 'Тестировщик', supporter: 'Поддержка', first: 'Первопроходец', rich: 'Коллекционер' }
+async function chooseBadge(badge: string) {
+  badgeBusy.value = true; badgeError.value = ''
+  try { await authStore.setMyBadge(badge) } catch { badgeError.value = 'Не удалось изменить значок.' }
+  finally { badgeBusy.value = false }
+}
+async function revokeOthers() {
+  if (!confirm('Завершить все остальные сеансы?')) return
+  devicesLoading.value = true; devicesError.value = ''
+  try { await authStore.terminateOtherSessions() } catch { devicesError.value = 'Не удалось завершить все сеансы.'; await refreshDevices() }
+  finally { devicesLoading.value = false }
+}
+const currentDeviceId = getOrCreateDeviceId()
+const devices = computed(() => authStore.activeDevices.filter(device => !device.revoked_at))
+async function refreshDevices() {
+  devicesLoading.value = true
+  devicesError.value = ''
+  try { await authStore.loadDevices() } catch { devicesError.value = 'Не удалось загрузить устройства. Попробуйте ещё раз.' }
+  finally { devicesLoading.value = false }
+}
+watch(currentSubView, view => { if (view === 'devices') void refreshDevices() })
+async function revokeDevice(id: string) {
+  if (!confirm('Завершить сеанс на этом устройстве?')) return
+  devicesLoading.value = true
+  devicesError.value = ''
+  try { await authStore.revokeDevice(id) } catch { devicesError.value = 'Не удалось завершить сеанс.' }
+  finally { devicesLoading.value = false }
+}
+function lastSeen(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Время неизвестно' : `Последняя активность: ${date.toLocaleString()}`
+}
 
 const profile = computed(() => authStore.profile)
 const userEmail = computed(() => authStore.user?.email || authStore.emailDraft || '')
@@ -210,7 +246,7 @@ function handleLogout() {
     </div>
 
       <!-- SUBVIEW: KILLER FEATURES (Киллер фичи) -->
-    <KillerFeaturesPane v-else-if="currentSubView === 'features'" @back="currentSubView = 'main'" />
+    <EncryptionSettingsPane v-else-if="currentSubView === 'features'" @back="currentSubView = 'main'" />
 
 
     <!-- SUBVIEW: SECURITY (Безопасность) -->
@@ -231,13 +267,18 @@ function handleLogout() {
       </div>
 
       <div class="sg-card">
-        <div class="dev-item">
+        <p v-if="devicesError" role="alert">{{ devicesError }} <button type="button" @click="refreshDevices">Повторить</button></p>
+        <p v-if="devicesLoading">Загрузка…</p>
+        <p v-else-if="!devices.length && !devicesError">Устройства не найдены.</p>
+        <div v-for="device in devices" :key="device.device_id" class="dev-item">
           <SolarIcon name="laptop-minimalistic-linear" :size="32" color="#0a84ff" />
           <div class="dev-info">
-            <div class="dev-name">Quietly Desktop Windows (Текущий сеанс)</div>
-            <div class="dev-sub">Windows 11 Mica • Онлайн</div>
+            <div class="dev-name">{{ device.name || device.kind || 'Устройство' }}<span v-if="device.device_id === currentDeviceId"> (Текущий сеанс)</span></div>
+            <div class="dev-sub">{{ lastSeen(device.last_seen) }}</div>
           </div>
+          <button v-if="device.device_id !== currentDeviceId" type="button" :disabled="devicesLoading" @click="revokeDevice(device.device_id)">Завершить</button>
         </div>
+        <button v-if="devices.some(d => d.device_id !== currentDeviceId)" type="button" class="sg-row" :disabled="devicesLoading" @click="revokeOthers">Завершить другие сеансы</button>
       </div>
     </div>
 
@@ -259,6 +300,10 @@ function handleLogout() {
         <p class="sg-desc">
           Значки верификации и отличия аккаунта. Присваиваются за активность или официальный статус в сети Quietly.
         </p>
+        <p v-if="badgeError" role="alert">{{ badgeError }}</p>
+        <button type="button" class="sg-row" :disabled="badgeBusy" @click="chooseBadge('none')">Без значка <span v-if="!profile.badge || profile.badge === 'none'">✓</span></button>
+        <button v-for="badge in (profile.badges || [])" :key="badge" type="button" class="sg-row" :disabled="badgeBusy" @click="chooseBadge(badge)">{{ badgeNames[badge] || badge }} <span v-if="profile.badge === badge">✓</span></button>
+        <p v-if="!profile.badges?.length" class="sg-desc">Доступных значков пока нет.</p>
       </div>
     </div>
   </div>

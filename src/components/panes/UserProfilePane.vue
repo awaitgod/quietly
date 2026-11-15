@@ -9,9 +9,10 @@ import { useAudioStore } from '../../stores/audio'
 import type { AudioTrack } from '../../types'
 import { useContactsStore } from '../../stores/contacts'
 import GiftGallery from '../common/GiftGallery.vue'
-import { FAV_ID } from '../../services/supabase'
+import { FAV_ID, tablesApi } from '../../services/supabase'
 import SolarIcon from '../common/SolarIcon.vue'
 import EmojiText from '../common/EmojiText.vue'
+import VerifiedBadge from '../common/VerifiedBadge.vue'
 import GroupManager from '../modals/GroupManager.vue'
 
 const presence = usePresenceStore()
@@ -23,6 +24,21 @@ const audio = useAudioStore()
 const contacts = useContactsStore()
 const blockBusy = ref(false)
 const blockError = ref('')
+const reportOpen = ref(false)
+const reportReason = ref('Спам')
+const reportDetails = ref('')
+const reportStatus = ref('')
+const reportBusy = ref(false)
+async function sendReport() {
+  if (!auth.user?.id || !user.value || reportBusy.value) return
+  reportBusy.value = true; reportStatus.value = ''
+  try {
+    const { error } = await tablesApi.reports.createReport({ reporter_id: auth.user.id, reported_id: user.value.id, reason: reportReason.value, details: reportDetails.value.trim() })
+    if (error) throw error
+    reportOpen.value = false; reportDetails.value = ''; reportStatus.value = 'Жалоба отправлена.'
+  } catch { reportStatus.value = 'Не удалось отправить жалобу.' }
+  finally { reportBusy.value = false }
+}
 const emit = defineEmits<{ (e: 'send-gift', recipient: { id: string; name: string }): void }>()
 const copied = ref(false)
 const user = computed(() => settings.viewedUser)
@@ -104,15 +120,18 @@ async function copyUsername() {
           <SolarIcon v-else-if="group" name="users-group-rounded-bold" :size="48" />
           <span v-else>{{ title.charAt(0).toUpperCase() }}</span>
         </div>
-        <h1><EmojiText :text="title" /></h1>
+        <h1><EmojiText :text="title" /><VerifiedBadge :profile="user" /></h1>
         <p v-if="user && status.text" class="profile-subtitle" :class="{ online: status.online }">{{ status.text }}</p>
         <p v-else-if="group" class="profile-subtitle">Участников: {{ groups.groupMembers.length }}</p>
       </div>
       <div class="profile-actions">
         <button type="button" class="write-button" @click="write"><SolarIcon name="chat-round-dots-linear" :size="18" /> Написать</button>
         <button v-if="user && !favorite && user.id !== auth.user?.id" type="button" class="back-button gift-action" aria-label="Подарить подарок" @click="emit('send-gift', { id: user.id, name: title })"><SolarIcon name="gift-linear" :size="20" /></button>
+        <button v-if="user && !favorite && user.id !== auth.user?.id" type="button" class="back-button gift-action" aria-label="Пожаловаться" title="Пожаловаться" @click="reportStatus = ''; reportOpen = true"><SolarIcon name="flag-linear" :size="20" /></button>
         <GroupManager v-if="group" :group="group" />
       </div>
+      <p v-if="reportStatus && !reportOpen" role="status">{{ reportStatus }}</p>
+      <Teleport to="body"><div v-if="reportOpen" class="report-overlay" @click.self="!reportBusy && (reportOpen = false)" @keydown.esc="!reportBusy && (reportOpen = false)"><section class="report-dialog" role="dialog" aria-modal="true" aria-labelledby="report-title"><h2 id="report-title">Пожаловаться</h2><form @submit.prevent="sendReport"><label>Причина<select v-model="reportReason"><option>Спам</option><option>Оскорбления или травля</option><option>Мошенничество</option><option>Неприемлемый контент</option><option>Другое</option></select></label><textarea v-model="reportDetails" maxlength="1000" placeholder="Подробности (необязательно)" aria-label="Подробности" /><p v-if="reportStatus" role="alert">{{ reportStatus }}</p><button type="submit" class="report-submit" :disabled="reportBusy">{{ reportBusy ? 'Отправка…' : 'Отправить жалобу' }}</button><button type="button" class="report-cancel" :disabled="reportBusy" @click="reportOpen = false">Отмена</button></form></section></div></Teleport>
       <div v-if="favorite || user?.username || bio" class="profile-info-card">
         <div v-if="favorite" class="profile-info-row">
           <div class="profile-label">О себе</div>
@@ -139,6 +158,14 @@ async function copyUsername() {
 </template>
 
 <style scoped>
+.report-overlay { position: fixed; inset: 0; z-index: 12000; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.6); backdrop-filter: blur(8px); }
+.report-dialog { width: min(100%, 440px); padding: 24px; border-radius: 24px; background: var(--card); color: var(--text); box-shadow: 0 24px 70px rgba(0,0,0,.4); }
+.report-dialog h2 { margin: 0 0 18px; font-size: var(--text-20); }
+.report-dialog form, .report-dialog label { display: grid; gap: 10px; }
+.report-dialog select, .report-dialog textarea { width: 100%; padding: 12px; border: 0; border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; }
+.report-dialog textarea { min-height: 90px; resize: vertical; }
+.report-submit, .report-cancel { min-height: 46px; border: 0; border-radius: 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.report-submit { background: var(--text); color: var(--bg); }.report-cancel { background: var(--surface); color: var(--text); }
 .profile-track { display: flex; align-items: center; gap: 12px; padding: 14px; margin-top: 14px; border-radius: 16px; background: var(--surface); }
 .profile-track-cover { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #0a84ff; color: white; }
 .profile-track-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -149,7 +176,7 @@ async function copyUsername() {
 .block-user:disabled { opacity:.5; cursor:default; }
 .block-error { color:#e2596a; font-size:var(--text-13); }
 .profile-info { width: 100%; height: 100%; overflow-y: auto; padding: var(--space-6) var(--space-4); color: var(--text); }
-.profile-content { position: relative; width: min(100%, 380px); margin-inline: auto; min-width: 0; }
+.profile-content { position: relative; width: min(100%, 440px); margin-inline: auto; min-width: 0; }
 .back-button, .copy-button { border: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .back-button { position: absolute; left: 0; top: 0; width: 36px; height: 36px; border-radius: 50%; background: var(--surface); color: var(--text); transition: opacity 0.15s; }
 .back-button:hover { opacity: 0.85; }

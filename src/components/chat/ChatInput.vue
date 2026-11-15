@@ -356,8 +356,10 @@ function cancelContext() {
   margin-inline: auto;
   padding: var(--space-3) var(--space-4) var(--space-1);
   background: transparent;
-
+  border: 0;
+  box-shadow: none;
 }
+:global(html[data-theme="light"]) .chat-ctx { box-shadow: none; }
 
 .chat-ctx-body {
   flex: 1;

@@ -6,6 +6,7 @@ import { useGroupsStore } from '../../stores/groups'
 import { useSettingsStore } from '../../stores/settings'
 import { FAV_ID } from '../../services/supabase'
 import SolarIcon from '../common/SolarIcon.vue'
+import VerifiedBadge from '../common/VerifiedBadge.vue'
 import SearchBar from './SearchBar.vue'
 defineProps<{ searchCount?: number; searchIndex?: number }>()
 const emit = defineEmits<{ (e: 'search-next'): void; (e: 'search-prev'): void }>()
@@ -128,7 +129,7 @@ function toggleSearch() {
 
       <!-- Title & Subtitle ("Бот" for Favorites) -->
       <div class="chat-top-info" @click="handleHeaderClick">
-        <div class="chat-top-name">{{ chatTitle }}</div>
+        <div class="chat-top-name">{{ chatTitle }}<VerifiedBadge v-if="!isGroup" :profile="chatStore.activeChat" /></div>
         <div
           class="chat-top-status"
           :class="{ typing: !!typingStatus && userStatus.online, online: !isGroup && userStatus.online }"

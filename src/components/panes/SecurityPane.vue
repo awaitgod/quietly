@@ -399,8 +399,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: 40px;
+  width: 100%;
+  height: 56px;
+  min-height: 56px;
   margin: 0 0 var(--space-6);
+  padding: 0 var(--space-4);
+  border-radius: 20px;
+  background: var(--card);
 }
 
 .back-circle {

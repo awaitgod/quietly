@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import EmojiText from '../common/EmojiText.vue'
+import VerifiedBadge from '../common/VerifiedBadge.vue'
 
 import { computed, nextTick, ref, watch } from 'vue'
 import { useAuthStore } from '../../stores/auth'
@@ -189,7 +190,7 @@ function toggleDesktopMenu() {
 
           <div class="chat-item-body">
             <div class="chat-item-row1">
-              <span class="chat-item-name">{{ chat.name }}</span>
+              <span class="chat-item-name">{{ chat.name }}<VerifiedBadge v-if="'rawProfile' in chat" :profile="chat.rawProfile" /></span>
               <div v-if="chat.lastMessage" class="chat-item-meta">
                 <!-- Read/Sent Checkmark for outgoing messages -->
                 <span v-if="chat.id === FAV_ID || isMessageOutgoing(chat.lastMessage)" class="chat-item-tick">

@@ -11,6 +11,22 @@ const economy = useEconomyStore()
 const auth = useAuthStore()
 const settings = useSettingsStore()
 const selected = ref<UserGift | null>(null)
+const actionError = ref('')
+const actionBusy = ref(false)
+async function hideGift() {
+  if (!selected.value) return
+  actionBusy.value = true; actionError.value = ''
+  try { await economy.setGiftHidden(selected.value.id, !selected.value.hidden); await economy.loadUserGifts(props.userId); selected.value = null }
+  catch { actionError.value = 'Не удалось изменить видимость подарка.' }
+  finally { actionBusy.value = false }
+}
+async function exchangeGift() {
+  if (!selected.value || !confirm('Обменять подарок на Qcoin? Это действие нельзя отменить.')) return
+  actionBusy.value = true; actionError.value = ''
+  try { await economy.exchangeGift(String(selected.value.id), 'profile'); await economy.loadUserGifts(props.userId); selected.value = null }
+  catch { actionError.value = 'Не удалось обменять подарок.' }
+  finally { actionBusy.value = false }
+}
 const gifts = computed(() => (economy.giftsByOwner[props.userId] || []).filter(g => !g.hidden || props.userId === auth.user?.id))
 watch(() => props.userId, id => { selected.value = null; if (id) void economy.loadUserGifts(id) }, { immediate: true })
 function giftInfo(gift: UserGift) { return economy.defaultGifts.find(item => item.id === gift.gift) }
@@ -39,6 +55,8 @@ function openSender(gift: UserGift) {
           <div class="gift-detail-image"><GiftArt :gift-id="selected.gift" /></div>
           <h2 id="gift-detail-title">{{ giftInfo(selected)?.title || 'Подарок' }}</h2>
           <dl><div><dt>От</dt><dd><button v-if="selected.sender_profile" type="button" class="gift-sender-link" @click="openSender(selected)"><span class="gift-sender-avatar"><img v-if="selected.sender_profile.avatar_url" :src="selected.sender_profile.avatar_url" alt="" /><span v-else>{{ (selected.sender_profile.name || '?').charAt(0).toUpperCase() }}</span></span><span>{{ selected.sender_profile.name || 'Пользователь' }}</span></button><span v-else>Пользователь</span></dd></div><div><dt>Дата</dt><dd>{{ date(selected.created_at) }}</dd></div><div><dt>Стоимость</dt><dd>{{ selected.price }} Qcoin</dd></div><div v-if="selected.message"><dt>Сообщение</dt><dd>{{ selected.message }}</dd></div></dl>
+          <p v-if="actionError" role="alert">{{ actionError }}</p>
+          <template v-if="userId === auth.user?.id"><button type="button" class="gift-action" :disabled="actionBusy" @click="hideGift">{{ selected.hidden ? 'Показать в профиле' : 'Скрыть из профиля' }}</button><button type="button" class="gift-action" :disabled="actionBusy" @click="exchangeGift">Обменять на Qcoin</button></template>
           <button type="button" class="gift-close" @click="selected = null">Закрыть</button>
         </div>
       </div>
@@ -46,6 +64,7 @@ function openSender(gift: UserGift) {
   </section>
 </template>
 <style scoped>
+.gift-action { width: 100%; min-height: 44px; margin-bottom: 8px; border-radius: 14px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
 .gift-sender-link { display: inline-flex; align-items: center; gap: 8px; padding: 0; text-align: left; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .gift-sender-link:hover { text-decoration: underline; }
 .gift-sender-avatar { width: 28px; height: 28px; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--surface); font-size: 14px; font-weight: 600; }

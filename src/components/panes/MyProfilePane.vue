@@ -6,6 +6,7 @@ import { useAudioStore } from '../../stores/audio'
 import { useSettingsStore } from '../../stores/settings'
 import SolarIcon from '../common/SolarIcon.vue'
 import EmojiText from '../common/EmojiText.vue'
+import VerifiedBadge from '../common/VerifiedBadge.vue'
 
 const emit = defineEmits<{ (e: 'edit-profile'): void; (e: 'open-accounts'): void; (e: 'open-topup'): void; (e: 'open-promo'): void }>()
 const auth = useAuthStore()
@@ -31,7 +32,7 @@ function playFavorite() {
     <div class="own-content">
       <div class="own-hero">
         <button type="button" class="own-avatar" :class="{ 'has-photo': profile.avatar_url }" :disabled="!profile.avatar_url" aria-label="Открыть фотографию профиля" @click="profile.avatar_url && settings.openImagePreview(profile.avatar_url, profile.name)"><img v-if="profile.avatar_url" :src="profile.avatar_url" alt="" /><span v-else>{{ profile.name.charAt(0).toUpperCase() }}</span></button>
-        <h1><EmojiText :text="profile.name" /></h1>
+        <h1><EmojiText :text="profile.name" /><VerifiedBadge :profile="profile" /></h1>
       </div>
       <button type="button" class="own-account-switch" @click="emit('open-accounts')"><SolarIcon name="users-group-rounded-linear" :size="20" /> Аккаунты <SolarIcon name="alt-arrow-right-linear" :size="18" /></button>
       <button type="button" class="own-primary" @click="emit('edit-profile')">Редактировать профиль</button>

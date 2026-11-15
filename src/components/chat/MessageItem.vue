@@ -3,6 +3,7 @@ import { useEconomyStore } from '../../stores/economy'
 import GiftArt from '../common/GiftArt.vue'
 const economyStore = useEconomyStore()
 import EmojiText from '../common/EmojiText.vue'
+import VerifiedBadge from '../common/VerifiedBadge.vue'
 import { emojiHtml } from '../../utils/emoji'
 
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
@@ -478,13 +479,14 @@ function handleBubbleClick() {
         class="chat-bubble"
         :class="[
           { 'sticker-bubble': isSticker, 'gift-bubble': isGift, 'image-bubble': isImage, 'audio-bubble': isAudio },
+          { 'short-text-bubble': !isSticker && !isGift && !isImage && !isAudio && !isE2E && !isForward && !isLockedEncrypted && !reactionGroups.length && !displayContent.includes('\n') && [...displayContent].length <= 12 },
           `pos-${groupPosition}`,
           { 'anim-in': isNew },
         ]"
         @click="!isSelectionMode && handleBubbleClick()"
       >
         <!-- Group Sender Name (shown on top of group only) -->
-        <button v-if="isGroup && !isMine && senderProfile && showSenderName" type="button" class="gb-nm" @click.stop="openSenderProfile"><EmojiText :text="senderProfile.name" /></button>
+        <button v-if="isGroup && !isMine && senderProfile && showSenderName" type="button" class="gb-nm" @click.stop="openSenderProfile"><EmojiText :text="senderProfile.name" /><VerifiedBadge :profile="senderProfile" /></button>
 
       <!-- Forward Header -->
       <div v-if="isForward && forwardPayload" class="fwd-banner">
@@ -786,6 +788,11 @@ function handleBubbleClick() {
 }
 
 .chat-bubble-text { width: 100%; text-align: left; align-self: stretch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-bubble:not(.sticker-bubble):not(.image-bubble):not(.gift-bubble):not(.audio-bubble) { min-width: min(110px, 78vw); }
+.chat-bubble.short-text-bubble { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 12px; }
+.short-text-bubble .chat-bubble-text { flex: 1 1 auto; width: auto; align-self: auto; }
+.short-text-bubble .chat-bubble-meta { flex: none; margin-top: 0; margin-left: auto; }
+.short-text-bubble .reply-preview, .short-text-bubble .gb-nm { flex-basis: 100%; }
 .chat-bubble.reaction-resizing { isolation: isolate; background-color: transparent !important; box-shadow: none; }
 .chat-bubble.reaction-resizing::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--reaction-bubble-color); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); transform-origin: left top; pointer-events: none; }
 .chat-bubble-row.mine .chat-bubble.reaction-resizing::before { transform-origin: right top; }
@@ -949,6 +956,7 @@ function handleBubbleClick() {
 .chat-bubble-row .chat-bubble.sticker-bubble .bubble-tick.read { color: #b7cbff; }
 
 .sticker-wrap { cursor: pointer; }
+.chat-bubble-row:not(.mine) .sticker-bubble .sticker-wrap { align-self: flex-start; }
 .sticker-wrap img, .sticker-wrap video {
   max-width: 160px;
   max-height: 160px;
@@ -997,6 +1005,8 @@ function handleBubbleClick() {
 }
 .msg-audio-card {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 12px;
   cursor: pointer;
@@ -1066,6 +1076,12 @@ function handleBubbleClick() {
   color: inherit;
   opacity: 0.75;
 }
+.msg-audio-sub span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .chat-bubble-row.mine .msg-audio-sub {
   color: inherit;
 }
@@ -1077,6 +1093,7 @@ function handleBubbleClick() {
   opacity: 1;
 }
 .msg-audio-dur {
+  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1279,6 +1296,9 @@ function handleBubbleClick() {
 }
 
 .mm-rx {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   font-size: 18px;
@@ -1287,9 +1307,14 @@ function handleBubbleClick() {
   cursor: pointer;
 }
 
-.mm-rx:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: none;
+@media (hover: hover) {
+  .msg-menu-box .mm-rx:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: none;
+  }
+  :global(html[data-theme="light"]) .msg-menu-box .mm-rx:hover {
+    background: rgba(20, 20, 40, 0.1);
+  }
 }
 
 .mm-actions-card {
@@ -1314,7 +1339,8 @@ function handleBubbleClick() {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.reply-preview { width: 100%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; margin-bottom: 6px; border-radius: 8px; background: rgba(90, 110, 160, .16); text-align: left; color: inherit; cursor: pointer; font: inherit; }
+.reply-preview { width: 100%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 8px; margin-bottom: 4px; border: 0; border-radius: 8px; background: rgba(0, 0, 0, .16); text-align: left; color: inherit; cursor: pointer; font: inherit; line-height: 1.25; }
+:global(html[data-theme="light"]) .chat-bubble-row:not(.mine) .reply-preview { background: rgba(50, 70, 100, .12); }
 .reply-preview:disabled { cursor: default; }
 .reply-preview-author { font-weight: 600; font-size: var(--text-12); }
 .reply-preview-text { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-12); opacity: .8; }

@@ -4,7 +4,7 @@ import EmojiText from '../common/EmojiText.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import type { StickerPack } from '../../types'
-import { EMOJI_CATEGORIES, OFFICIAL_PACKS, tablesApi } from '../../services/supabase'
+import { EMOJI_CATEGORIES, OFFICIAL_PACKS, tablesApi, storageApi } from '../../services/supabase'
 import { stickerUrl, isVideoSticker } from '../../utils/stickers'
 import StickerPackCreateModal from '../modals/StickerPackCreateModal.vue'
 import StickerPackPreview from '../modals/StickerPackPreview.vue'
@@ -41,6 +41,36 @@ function readAdded() { try { const saved = localStorage.getItem(packKey.value); 
 function toggleOfficial(id: string) { addedOfficial.value = addedOfficial.value.includes(id) ? addedOfficial.value.filter(x => x !== id) : [...addedOfficial.value, id]; try { localStorage.setItem(packKey.value, JSON.stringify(addedOfficial.value)) } catch {} if (!addedOfficial.value.includes(activePack.value)) activePack.value = addedOfficial.value[0] || (packs.value[0] ? `user:${packs.value[0].id}` : 'catalog') }
 const visiblePacks = computed(() => [...OFFICIAL_PACKS.filter(p => addedOfficial.value.includes(p.id)).map(p => ({ ...p, key: p.id })), ...packs.value.map(p => ({ ...p, key: `user:${p.id}` }))])
 const currentPack = computed(() => visiblePacks.value.find(p => p.key === activePack.value))
+const editing = ref(false)
+const editError = ref('')
+const editBusy = ref(false)
+async function updateItems(items: string[]) {
+  const pack = currentPack.value, userId = auth.user?.id
+  if (!pack || !pack.key.startsWith('user:') || !userId) return
+  editBusy.value = true; editError.value = ''
+  try { const { error } = await tablesApi.stickerPacks.updatePackItems(pack.id, userId, items); if (error) throw error; await loadPacks() }
+  catch { editError.value = 'Не удалось изменить набор.' }
+  finally { editBusy.value = false }
+}
+async function addSticker(event: Event) {
+  const input = event.target as HTMLInputElement, file = input.files?.[0], userId = auth.user?.id, pack = currentPack.value
+  input.value = ''
+  if (!file || !userId || !pack) return
+  const formats: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/webm': 'webm' }
+  if (!formats[file.type] || file.size > 25 * 1024 * 1024 || pack.items.length >= 30) { editError.value = 'Выберите изображение или видео до 25 МБ. В наборе может быть до 30 стикеров.'; return }
+  editBusy.value = true; editError.value = ''
+  try { const result = await storageApi.stickers.uploadSticker(userId, file, formats[file.type], file.type); if (result.error) throw result.error; await updateItems([...pack.items, storageApi.stickers.getPublicUrl(result.data.path)]) }
+  catch { editError.value = 'Не удалось загрузить стикер.' }
+  finally { editBusy.value = false }
+}
+async function deletePack() {
+  const pack = currentPack.value, userId = auth.user?.id
+  if (!pack || !userId || !confirm('Удалить этот набор стикеров?')) return
+  editBusy.value = true; editError.value = ''
+  try { const { data, error } = await tablesApi.stickerPacks.deletePack(pack.id, userId); if (error || !data?.length) throw error || new Error('Набор не удалён'); editing.value = false; activePack.value = 'welcome'; await loadPacks() }
+  catch { editError.value = 'Не удалось удалить набор.' }
+  finally { editBusy.value = false }
+}
 readAdded()
 onMounted(() => { void loadPacks(); window.addEventListener('quietly-sticker-packs-changed', readAdded) })
 onUnmounted(() => window.removeEventListener('quietly-sticker-packs-changed', readAdded))
@@ -51,6 +81,12 @@ function handleEmojiClick(e: string) {
 
 function handleStickerClick(src: string) {
   emit('select-sticker', src)
+}
+function selectPackItem(item: string) {
+  const pack = currentPack.value
+  if (editing.value && pack?.key.startsWith('user:')) {
+    if (confirm('Удалить стикер из набора?')) void updateItems(pack.items.filter(x => x !== item))
+  } else handleStickerClick(item)
 }
 </script>
 
@@ -68,14 +104,16 @@ function handleStickerClick(src: string) {
           <div class="sp-head">
             <button type="button" class="sp-pack-title" @click="previewPack = { id: String(pack.id), title: pack.title, items: pack.items, official: OFFICIAL_PACKS.some(p => p.id === pack.key) }">{{ pack.title }} <span aria-hidden="true">›</span></button>
             <small>{{ pack.items.length }} стикеров</small>
+            <button v-if="pack.key.startsWith('user:')" type="button" @click="editing = !editing">{{ editing ? 'Готово' : 'Изменить' }}</button>
           </div>
+          <div v-if="editing && pack.key.startsWith('user:')" class="sp-edit"><label>Добавить стикер<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" :disabled="editBusy" @change="addSticker" /></label><button type="button" :disabled="editBusy" @click="deletePack">Удалить набор</button><p v-if="editError" role="alert">{{ editError }}</p></div>
           <div class="sp-grid">
             <button
               v-for="item in pack.items"
               :key="item"
               type="button"
               class="sp-cell"
-              @click="handleStickerClick(item)"
+              @click="selectPackItem(item)"
             >
               <video v-if="isVideoSticker(item)" :src="stickerUrl(item)" autoplay muted loop playsinline aria-label="Стикер" />
               <img v-else :src="stickerUrl(item)" alt="Стикер недоступен" loading="lazy" />
@@ -128,6 +166,9 @@ function handleStickerClick(src: string) {
 </template>
 
 <style scoped>
+.sp-edit { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; color: var(--text); font-size: var(--text-12); }
+.sp-edit label, .sp-edit button { padding: 8px; border-radius: 10px; background: var(--card); color: var(--text); cursor: pointer; }
+.sp-edit input { display: block; width: 100%; padding: 4px; font-size: 11px; }
 .sticker-panel {
   position: absolute;
   bottom: calc(100% + 12px);
