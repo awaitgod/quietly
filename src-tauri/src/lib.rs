@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod db;
+#[cfg(desktop)]
 pub mod tray;
 
 use db::Database;
@@ -35,6 +36,7 @@ pub fn run() {
             app.manage(database);
 
             // 2. Setup System Tray
+            #[cfg(desktop)]
             tray::create_tray(app.handle())?;
 
             // 3. Setup Window Vibrancy (Mica on Windows 11)

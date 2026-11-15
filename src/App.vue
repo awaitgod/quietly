@@ -65,6 +65,26 @@ function openGiftCatalog(recipient?: { id: string; name: string }) {
   giftRecipient.value = recipient || (authStore.user?.id ? { id: authStore.user.id, name: authStore.profile?.name || 'Вы' } : null)
   economyStore.isGiftsCatalogOpen = true
 }
+// The Android view resizes around the keyboard; follow its layout viewport.
+let wallpaperHeight = 0
+function updateVisualViewport() {
+  if (window.innerHeight > wallpaperHeight) {
+    wallpaperHeight = window.innerHeight
+    document.documentElement.style.setProperty('--wallpaper-height', `${wallpaperHeight}px`)
+  }
+  document.documentElement.style.setProperty('--vv-h', `${window.innerHeight}px`)
+  document.documentElement.style.setProperty('--vv-top', '0px')
+}
+onMounted(() => {
+  updateVisualViewport()
+  window.addEventListener('resize', updateVisualViewport)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', updateVisualViewport)
+  document.documentElement.style.removeProperty('--vv-h')
+  document.documentElement.style.removeProperty('--vv-top')
+  document.documentElement.style.removeProperty('--wallpaper-height')
+})
 const networkOnline = ref(typeof navigator === 'undefined' || navigator.onLine)
 function updateNetworkStatus() {
   const wasOffline = !networkOnline.value
@@ -75,6 +95,40 @@ function updateNetworkStatus() {
 }
 onMounted(() => { window.addEventListener('online', updateNetworkStatus); window.addEventListener('offline', updateNetworkStatus) })
 onUnmounted(() => { window.removeEventListener('online', updateNetworkStatus); window.removeEventListener('offline', updateNetworkStatus) })
+
+// Keep Android back navigation inside the application, including transient panels.
+const paneHistory: Array<typeof settingsStore.currentPane> = []
+let navigatingBack = false
+watch(() => settingsStore.currentPane, (pane, previous) => {
+  if (!navigatingBack && pane !== previous) paneHistory.push(previous)
+}, { flush: 'sync' })
+function onAndroidBack() {
+  if (history.state?.quietlyStickerPanel) { history.back(); return }
+  if (settingsStore.previewImageSrc) { settingsStore.closeImagePreview(); return }
+  if (legalDocType.value) { legalDocType.value = null; return }
+  if (cropperFile.value) { cropperFile.value = null; return }
+  if (isCreateGroupOpen.value) { isCreateGroupOpen.value = false; return }
+  if (isAccountSwitcherOpen.value) { isAccountSwitcherOpen.value = false; return }
+  if (economyStore.isGiftsCatalogOpen) { economyStore.isGiftsCatalogOpen = false; return }
+  if (economyStore.isTopupOpen) { economyStore.isTopupOpen = false; return }
+  if (economyStore.isPromoOpen) { economyStore.isPromoOpen = false; return }
+  if (audioStore.isUploadModalOpen) { audioStore.isUploadModalOpen = false; return }
+  if (audioStore.isPlayerModalOpen) { audioStore.isPlayerModalOpen = false; return }
+  if (settingsStore.isDesktopMenuOpen) { settingsStore.isDesktopMenuOpen = false; return }
+  if (settingsStore.currentPane === 'settings' && settingsStore.settingsSubView !== 'main') { settingsStore.settingsSubView = 'main'; return }
+  if (chatStore.isSelectionMode) { chatStore.exitSelectionMode(); return }
+  if (chatStore.isSearchOpen) { chatStore.isSearchOpen = false; return }
+  if (settingsStore.currentPane === 'dm' && isChatActive.value) { chatStore.activeChat = null; groupsStore.activeGroup = null; return }
+  if (settingsStore.currentPane !== 'dm') {
+    navigatingBack = true
+    settingsStore.setPane(paneHistory.pop() || 'dm')
+    navigatingBack = false
+    return
+  }
+  if (authStore.authScreen !== 'logged_in' && authStore.authScreen !== 'email') authStore.authScreen = 'email'
+}
+onMounted(() => window.addEventListener('quietly-android-back', onAndroidBack))
+onUnmounted(() => window.removeEventListener('quietly-android-back', onAndroidBack))
 
 const isChatActive = computed(() => {
   return !!chatStore.activeChat || !!groupsStore.activeGroup
@@ -302,16 +356,19 @@ function onCropped(blob: Blob) {
 
 /* Mobile (< 768px): Chat open switches view */
 @media (max-width: 767px) {
+  #loggedInScreen:not([data-list-pane="dm"]) .chats-sidebar {
+    display: none;
+  }
   #loggedInScreen.chat-open .chats-sidebar {
     display: none;
   }
   #loggedInScreen.chat-open .active-pane {
     display: flex;
   }
-  #loggedInScreen:not(.chat-open) [data-list-pane]:not([data-list-pane="dm"]) .active-pane {
+  #loggedInScreen:not(.chat-open)[data-list-pane]:not([data-list-pane="dm"]) .active-pane {
     display: flex;
   }
-  #loggedInScreen:not(.chat-open) [data-list-pane="dm"] .active-pane {
+  #loggedInScreen:not(.chat-open)[data-list-pane="dm"] .active-pane {
     display: none;
   }
 }

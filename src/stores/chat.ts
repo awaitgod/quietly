@@ -7,6 +7,7 @@ import type { Message, UserProfile } from '../types';
 import { useAuthStore } from './auth';
 import { usePresenceStore } from './presence';
 import { useContactsStore } from './contacts';
+import { readChatListCache, writeChatListCache } from '../services/chatListCache';
 export interface ConversationItem {
     id: string;
     profile: UserProfile;
@@ -64,9 +65,10 @@ export const useChatStore = defineStore('chat', () => {
     async function loadArchiveState() {
         if (!authStore.user?.id)
             return;
+        const userId = authStore.user.id;
         try {
-            const { data } = await tablesApi.userChatArchiveState.loadArchive(authStore.user.id);
-            if (data?.archived_ids && Array.isArray(data.archived_ids)) {
+            const { data } = await tablesApi.userChatArchiveState.loadArchive(userId);
+            if (authStore.user?.id === userId && data?.archived_ids && Array.isArray(data.archived_ids)) {
                 archivedChatIds.value = new Set(data.archived_ids);
             }
         }
@@ -97,18 +99,21 @@ export const useChatStore = defineStore('chat', () => {
         if (!authStore.user?.id)
             return;
         const myId = authStore.user.id;
+        const before = new Map(Array.from(conversations.value, ([id, item]) => [id, JSON.stringify(item)]));
         try {
-            await loadArchiveState();
-            const { data: recentMsgs, error } = await tablesApi.messages.loadRecentDialogs(myId, 400);
+            const [, result] = await Promise.all([loadArchiveState(), tablesApi.messages.loadRecentDialogs(myId, 400)]);
+            const { data: recentMsgs, error } = result;
             if (error)
                 throw error;
+            if (authStore.user?.id !== myId) return;
             const partnerIds = new Set<string>();
             recentMsgs?.forEach((m) => {
                 const partner = m.sender_id === myId ? m.receiver_id : m.sender_id;
                 if (partner)
                     partnerIds.add(partner);
             });
-            conversations.value.set(FAV_ID, {
+            const updated = new Map<string, ConversationItem>();
+            updated.set(FAV_ID, {
                 ...conversations.value.get(FAV_ID),
                 id: FAV_ID,
                 profile: FAV_PROFILE as UserProfile,
@@ -116,7 +121,9 @@ export const useChatStore = defineStore('chat', () => {
                 isGroup: false,
             });
             if (partnerIds.size > 0) {
-                const { data: profilesData } = await tablesApi.profiles.getByIds(Array.from(partnerIds));
+                const { data: profilesData, error: profilesError } = await tablesApi.profiles.getByIds(Array.from(partnerIds));
+                if (profilesError) throw profilesError;
+                if (authStore.user?.id !== myId) return;
                 const profMap = new Map<string, UserProfile>();
                 profilesData?.forEach((p) => profMap.set(p.id, p as UserProfile));
                 const lastMsgMap = new Map<string, Message>();
@@ -134,7 +141,7 @@ export const useChatStore = defineStore('chat', () => {
                 });
                 partnerIds.forEach((pid) => {
                     const p = profMap.get(pid) || { id: pid, name: 'Пользователь', username: 'user' };
-                    conversations.value.set(pid, {
+                    updated.set(pid, {
                         id: pid,
                         profile: p,
                         lastMessage: lastMsgMap.get(pid) || null,
@@ -143,6 +150,10 @@ export const useChatStore = defineStore('chat', () => {
                     });
                 });
             }
+            for (const [id, item] of conversations.value) {
+                if ((recentMsgs?.length || 0) >= 400 && !updated.has(id) || before.get(id) !== JSON.stringify(item)) updated.set(id, item);
+            }
+            conversations.value = updated;
             setupGlobalRealtime();
             conversationsLoadFailed.value = false;
         }
@@ -295,8 +306,22 @@ export const useChatStore = defineStore('chat', () => {
             conversationsLoadFailed.value = false;
             messages.value = [];
             activeChat.value = null;
+            archivedChatIds.value = new Set(id ? readChatListCache<string>(id, 'archive') || [] : []);
+            if (id) {
+                const cached = readChatListCache<ConversationItem>(id, 'dialogs');
+                if (cached) { conversations.value = new Map(cached.filter(item => item && typeof item.id === 'string' && item.profile).map(item => [item.id, item])); conversationsLoaded.value = true; }
+            }
         }
     }, { immediate: true, flush: 'sync' });
+    watch(archivedChatIds, value => {
+        if (authStore.user?.id && conversationsLoaded.value) writeChatListCache(authStore.user.id, 'archive', Array.from(value));
+    }, { deep: true });
+    watch(conversations, value => {
+        if (authStore.user?.id && conversationsLoaded.value) writeChatListCache(authStore.user.id, 'dialogs', Array.from(value.values()));
+    }, { deep: true });
+    watch(conversationsLoaded, loaded => {
+        if (loaded && authStore.user?.id && !conversationsLoadFailed.value) writeChatListCache(authStore.user.id, 'dialogs', Array.from(conversations.value.values()));
+    });
     watch(messages, value => {
         const id = activeChat.value?.id;
         if (id)

@@ -1,4 +1,5 @@
 import type { UserProfile } from '../types';
+import { clearChatListCache } from './chatListCache';
 const ACTIVE_KEY = 'quietly_active_account_slot';
 const ACCOUNTS_KEY = 'quietly_accounts';
 const DEFAULT_STORAGE_KEY = 'sb-csgpzwbqcguhzkklhguo-auth-token';
@@ -29,6 +30,8 @@ export function rememberAccount(profile: UserProfile, email: string) {
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify([...accounts, entry]));
 }
 export function removeAccount(slot: string) {
+    const account = savedAccounts().find(item => item.slot === slot);
+    if (account) clearChatListCache(account.id);
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(savedAccounts().filter(account => account.slot !== slot)));
     localStorage.removeItem(accountSessionKey(slot));
     localStorage.removeItem(`${accountSessionKey(slot)}-code-verifier`);

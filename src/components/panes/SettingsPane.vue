@@ -42,7 +42,7 @@ function handleLogout() {
 <template>
   <div v-if="profile" class="settings-pane">
     <!-- SUBVIEW: MAIN SETTINGS (Screenshot 3) -->
-    <div v-if="currentSubView === 'main'" class="st-view">
+    <div v-if="currentSubView === 'main'" class="st-view st-main-view">
       <div class="dm-top">
         <h1 class="st-main-title">Настройки</h1>
       </div>
@@ -302,21 +302,22 @@ function handleLogout() {
 .st-profile-row {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   background: transparent;
   border: none;
-  padding: var(--space-4);
+  padding: var(--space-2-5) var(--space-3);
   cursor: pointer;
   text-align: left;
   border: 1px solid var(--ui-border);
   border-radius: var(--radius-lg);
   background: var(--card);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-2);
 }
 
 .st-avatar-circle {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
+  flex: none;
   border-radius: 50%;
   background: #6366f1;
   display: flex;
@@ -345,8 +346,8 @@ function handleLogout() {
 
 .st-name {
   font-family: Montserrat, sans-serif;
-  font-size: var(--text-16);
-  font-weight: 700;
+  font-size: var(--text-14);
+  font-weight: 600;
   color: var(--text);
 }
 
@@ -359,7 +360,7 @@ function handleLogout() {
 .st-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-0-5);
   padding: var(--space-2);
   border: 1px solid var(--ui-border);
   border-radius: var(--radius-lg);
@@ -369,9 +370,9 @@ function handleLogout() {
 .st-row {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  min-height: 52px;
-  padding: var(--space-3);
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: var(--space-2-5) var(--space-3);
   background: transparent;
   border: none;
   border-radius: 12px;
@@ -386,8 +387,8 @@ function handleLogout() {
 
 .st-row-label {
   flex: 1;
-  font-size: var(--text-16);
-  font-weight: 500;
+  font-size: var(--text-14);
+  font-weight: 600;
   color: var(--text);
 }
 
@@ -650,6 +651,10 @@ function handleLogout() {
   background: var(--card);
 }
 .settings-pane .st-main-title { margin: 0; }
+.settings-pane .st-main-view .dm-top { margin-bottom: var(--space-2-5); }
+.st-main-view .st-profile-row, .st-main-view .st-list { border-color: rgba(255, 255, 255, .08); border-radius: 20px; background: rgba(255, 255, 255, .015); }
+.st-main-view .st-row > :deep(svg:first-child) { width: 20px; height: 20px; flex: none; }
+:global(html[data-theme="light"]) .st-main-view .st-profile-row, :global(html[data-theme="light"]) .st-main-view .st-list { background: #fff; }
 .sg-card-spaced, .sg-links { margin-top: var(--space-4); }
 .sg-links { display: flex; flex-direction: column; padding: var(--space-2); border: 1px solid var(--ui-border); border-radius: var(--radius-lg); background: var(--card); }
 .sg-links .st-row { width: 100%; }

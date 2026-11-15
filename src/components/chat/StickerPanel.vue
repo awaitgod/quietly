@@ -145,6 +145,19 @@ function handleStickerClick(src: string) {
   z-index: 40;
 }
 
+@media (max-width: 767px) {
+  .sticker-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(-1 * var(--keyboard-inset, 0px));
+    width: 100%;
+    height: var(--keyboard-height, 280px);
+    border-radius: 16px 16px 0 0;
+    z-index: 40;
+  }
+}
+
 .sp-pack-title { padding: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--text-14); font-weight: 600; cursor: pointer; }
 .sp-catalog-title { flex:1; text-align:left; }
 .sp-status { color: var(--muted); font-size: var(--text-14); line-height: 1.5; }

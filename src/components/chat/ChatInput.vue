@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../../stores/chat'
 import { useGroupsStore } from '../../stores/groups'
 import { useSettingsStore } from '../../stores/settings'
@@ -21,6 +21,40 @@ const savingEdit = ref(false)
 const editError = ref('')
 const savedDraft = ref('')
 const isStickerPanelOpen = ref(false)
+const keyboardHeight = ref(0)
+const keyboardInset = ref(0)
+let viewportBaseline = window.innerHeight
+let panelHistory = false
+const mobile = () => window.matchMedia('(max-width: 767px)').matches
+const heightKey = () => `quietly-keyboard-height:${window.innerWidth > window.innerHeight ? 'landscape' : 'portrait'}`
+function measureKeyboard() {
+  if (!mobile()) return
+  const viewport = window.visualViewport
+  const visible = viewport ? viewport.height + viewport.offsetTop : window.innerHeight
+  if (window.innerHeight > viewportBaseline) viewportBaseline = window.innerHeight
+  const inset = Math.max(0, viewportBaseline - visible)
+  keyboardInset.value = inset > 120 ? inset : 0
+  if (keyboardInset.value) {
+    keyboardHeight.value = keyboardInset.value
+    try { localStorage.setItem(heightKey(), String(keyboardHeight.value)) } catch {}
+  } else {
+    viewportBaseline = window.innerHeight
+    try { keyboardHeight.value = Number(localStorage.getItem(heightKey())) || 0 } catch {}
+  }
+}
+function togglePanel() {
+  if (isStickerPanelOpen.value) { closePanel(); return }
+  isStickerPanelOpen.value = true
+  if (mobile()) { history.pushState({ ...history.state, quietlyStickerPanel: true }, ''); panelHistory = true }
+}
+function closePanel() {
+  isStickerPanelOpen.value = false
+  if (panelHistory && history.state?.quietlyStickerPanel) history.back()
+  panelHistory = false
+}
+function onBack() { if (isStickerPanelOpen.value && panelHistory) { isStickerPanelOpen.value = false; panelHistory = false } }
+onMounted(() => { measureKeyboard(); window.addEventListener('resize', measureKeyboard); window.visualViewport?.addEventListener('resize', measureKeyboard); window.addEventListener('popstate', onBack) })
+onUnmounted(() => { window.removeEventListener('resize', measureKeyboard); window.visualViewport?.removeEventListener('resize', measureKeyboard); window.removeEventListener('popstate', onBack) })
 const editorRef = ref<InstanceType<typeof EmojiEditor> | null>(null)
 const authStore = useAuthStore()
 const isSendingText = ref(false)
@@ -165,7 +199,6 @@ function handleInput() { if (!isGroup.value) chatStore.sendTyping() }
 function onSelectEmoji(emoji: string) { editorRef.value?.insertEmoji(emoji) }
 
 function onSelectSticker(stickerSrc: string) {
-  isStickerPanelOpen.value = false
   if (isGroup.value) {
     groupsStore.sendGroupMessage(`sticker::${stickerSrc}`)
   } else {
@@ -235,11 +268,11 @@ function cancelContext() {
         class="chat-emoji-btn"
         :class="{ on: isStickerPanelOpen }"
         aria-label="Стикеры и эмодзи" :aria-expanded="isStickerPanelOpen"
-        @click="isStickerPanelOpen = !isStickerPanelOpen"
+        @click="togglePanel"
       >
         <SolarIcon name="smile-circle-linear" :size="24" />
       </button>
-          <StickerPanel v-if="isStickerPanelOpen" @select-emoji="onSelectEmoji" @select-sticker="onSelectSticker" @close="isStickerPanelOpen = false" />
+          <StickerPanel v-if="isStickerPanelOpen" :style="{ '--keyboard-height': `${keyboardHeight || 280}px`, '--keyboard-inset': `${keyboardInset}px` }" @select-emoji="onSelectEmoji" @select-sticker="onSelectSticker" @close="closePanel" />
         </div>
         <EmojiEditor ref="editorRef" v-model="text" @send="handleSend" @typing="handleInput" />
 

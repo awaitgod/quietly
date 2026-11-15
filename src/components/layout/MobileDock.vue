@@ -73,7 +73,7 @@ function selectTab(tab: NavPane) {
 </template>
 
 <style scoped>
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   .mobile-only {
     display: none !important;
   }

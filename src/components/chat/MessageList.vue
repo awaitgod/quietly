@@ -387,7 +387,7 @@ onUnmounted(() => window.removeEventListener('pagehide', onPageHide))
 
 @media (max-width: 767px) { .scroll-bottom-btn { right: var(--space-4); } }
 .scroll-bottom-btn:hover {
-  background-color: #2e2e34;
+  background-color: color-mix(in srgb, var(--surface) 90%, var(--text));
   transform: scale(1.05);
 }
 </style>

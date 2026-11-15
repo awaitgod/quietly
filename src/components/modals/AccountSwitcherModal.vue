@@ -2,6 +2,9 @@
 import { computed, ref } from 'vue'
 import { activeAccountSlot, newAccountSlot, savedAccounts, selectAccountSlot } from '../../services/accountStorage'
 import SolarIcon from '../common/SolarIcon.vue'
+import { cachedUnreadCount } from '../../services/chatListCache'
+import { useChatStore } from '../../stores/chat'
+import { useGroupsStore } from '../../stores/groups'
 
 const emit = defineEmits<{ (event: 'close'): void }>()
 const accounts = ref(savedAccounts())
@@ -9,6 +12,11 @@ const active = activeAccountSlot()
 const switching = ref(false)
 const selectedName = ref('')
 const hasAccounts = computed(() => accounts.value.length > 0)
+const chatStore = useChatStore()
+const groupsStore = useGroupsStore()
+function unreadCount(account: typeof accounts.value[number]) {
+  return account.slot === active ? chatStore.totalUnreadCount + groupsStore.totalGroupUnread : cachedUnreadCount(account.id)
+}
 
 function switchTo(slot: string, name: string) {
   if (switching.value) return
@@ -32,6 +40,7 @@ function addAccount() { switchTo(newAccountSlot(), 'Добавляем акка�
         <button v-for="account in accounts" :key="account.slot" class="account-row" type="button" :disabled="switching" @click="switchTo(account.slot, account.name)">
           <span class="account-avatar"><img v-if="account.avatarUrl" :src="account.avatarUrl" alt="" /><span v-else>{{ account.name.charAt(0).toUpperCase() }}</span></span>
           <span class="account-info"><strong>{{ account.name }}</strong><small>{{ account.username ? '@' + account.username : account.email }}</small></span>
+          <span v-if="unreadCount(account)" class="account-unread" :title="account.slot === active ? 'Непрочитанные сообщения' : 'Непрочитанные при последнем открытии аккаунта'">{{ (unreadCount(account) || 0) > 99 ? '99+' : unreadCount(account) }}</span>
           <span v-if="account.slot === active" class="account-current">Вы здесь</span>
           <SolarIcon v-else name="alt-arrow-right-linear" :size="20" class="account-arrow" />
         </button>
@@ -61,6 +70,7 @@ function addAccount() { switchTo(newAccountSlot(), 'Добавляем акка�
 .account-info strong, .account-info small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .account-info small { color:var(--muted); }
 .account-current { color:#719dff; font-size:12px; white-space:nowrap; }
+.account-unread { flex:none; min-width:24px; padding:4px 6px; border-radius:999px; background:#4b78d4; color:#fff; text-align:center; font-size:12px; font-weight:600; }
 .account-arrow { color:var(--muted); flex:none; }
 .account-add { font-weight:600; }
 .account-switching { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:var(--surface); text-align:center; }

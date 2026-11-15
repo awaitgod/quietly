@@ -87,6 +87,24 @@ function openContact(user?: UserProfile) {
   padding: 0 var(--space-4) var(--space-6);
 }
 
+.contacts-pane .dm-top, .contacts-pane .chat-list {
+  border-radius: 20px;
+}
+.contacts-pane .dm-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 0 12px;
+  margin: 4px 0 8px;
+}
+.contacts-pane .chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  margin: 0;
+}
 .pane-heading {
   font-family: Unbounded, sans-serif;
   font-size: var(--page-title-size);

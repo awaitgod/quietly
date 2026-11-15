@@ -31,6 +31,22 @@ onMounted(() => {
 })
 onUnmounted(() => composerObserver?.disconnect())
 
+let swipeStart: { x: number; y: number } | null = null
+function onSwipeStart(event: TouchEvent) {
+  const touch = event.touches[0]
+  swipeStart = touch && event.touches.length === 1 && touch.clientX <= 40 ? { x: touch.clientX, y: touch.clientY } : null
+}
+function onSwipeEnd(event: TouchEvent) {
+  const touch = event.changedTouches[0]
+  if (swipeStart && touch) {
+    const dx = touch.clientX - swipeStart.x, dy = touch.clientY - swipeStart.y
+    if (dx > 80 && dx > Math.abs(dy) * 1.5) {
+      chatStore.activeChat = null
+      groupsStore.activeGroup = null
+    }
+  }
+  swipeStart = null
+}
 const isGroup = computed(() => !!groupsStore.activeGroup)
 const joinError = ref('')
 watch(() => groupsStore.activeGroup?.id, () => { joinError.value = '' })
@@ -171,7 +187,7 @@ function scrollToMessageId(id: string | number) {
 </script>
 
 <template>
-  <div class="chat-view">
+  <div class="chat-view" @touchstart.passive="onSwipeStart" @touchend.passive="onSwipeEnd" @touchcancel="swipeStart = null">
     <!-- Chat Header -->
     <div class="header-container"><Transition name="header-switch"><div v-if="chatStore.isSelectionMode" key="selection" class="header-panel"><SelectionHeader :messages="messages" :is-group="isGroup" /></div><div v-else key="chat" class="header-panel"><ChatHeader :search-count="matches.length" :search-index="matchIndex" @search-next="moveSearch(1)" @search-prev="moveSearch(-1)" /></div></Transition></div>
 

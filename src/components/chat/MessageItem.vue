@@ -347,7 +347,25 @@ watch(myReaction, (emoji, previous) => {
   if (reactionEffectTimer) clearTimeout(reactionEffectTimer)
   reactionEffectTimer = setTimeout(() => { reactionEffect.value = null }, file ? 2880 : 1100)
 })
-onUnmounted(() => { if (reactionEffectTimer) clearTimeout(reactionEffectTimer); bubbleResizeAnimation?.cancel() })
+let touchTimer: ReturnType<typeof setTimeout> | undefined
+let touchStartX = 0, touchStartY = 0
+function cancelLongPress() { if (touchTimer) clearTimeout(touchTimer); touchTimer = undefined }
+function startLongPress(event: TouchEvent) {
+  if (props.isSelectionMode || event.touches.length !== 1) return
+  const touch = event.touches[0]!
+  touchStartX = touch.clientX; touchStartY = touch.clientY
+  cancelLongPress()
+  touchTimer = setTimeout(() => {
+    menuPosition.value = { left: Math.max(8, Math.min(touchStartX - 135, window.innerWidth - 288)), top: Math.max(8, Math.min(touchStartY, window.innerHeight - 360)) }
+    showAllReactions.value = false
+    isContextMenuOpen.value = true
+  }, 550)
+}
+function moveLongPress(event: TouchEvent) {
+  const touch = event.touches[0]
+  if (!touch || Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY) > 10) cancelLongPress()
+}
+onUnmounted(() => { cancelLongPress(); if (reactionEffectTimer) clearTimeout(reactionEffectTimer); bubbleResizeAnimation?.cancel() })
 function onContextMenu(event: MouseEvent | KeyboardEvent) {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const x = event instanceof MouseEvent ? event.clientX : rect.right
@@ -428,6 +446,10 @@ function handleBubbleClick() {
       @keydown.shift.f10.prevent="!isSelectionMode && onContextMenu($event)"
       @keydown.esc="isContextMenuOpen = false"
       @contextmenu.prevent="!isSelectionMode && onContextMenu($event)"
+      @touchstart.passive="startLongPress"
+      @touchmove.passive="moveLongPress"
+      @touchend="cancelLongPress"
+      @touchcancel="cancelLongPress"
     >
       <!-- Selection Checkbox -->
       <button
@@ -1236,7 +1258,7 @@ function handleBubbleClick() {
   padding: var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 2px;
   min-width: 210px;
 }
 
@@ -1307,8 +1329,9 @@ function handleBubbleClick() {
 .mm-extra.open { grid-template-rows: 1fr; opacity: 1; }
 .mm-extra-inner { overflow: hidden; min-height: 0; }
 .mm-extra-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; padding: 0 2px; }
-.mm-extra:not(.open) { visibility: hidden; transition: grid-template-rows .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease, visibility 0s linear .22s; }
+.mm-extra:not(.open) { display: none; visibility: hidden; transition: grid-template-rows .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease, visibility 0s linear .22s; }
 .mm-rx { min-width: 0; min-height: 30px; }
+.mm-more { aspect-ratio: 1; border-radius: 50%; }
 .message-reactions { display: flex; align-self: flex-start; justify-content: flex-start; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .bubble-footer { display: contents; }
 .bubble-footer.with-reactions { display: flex; align-self: stretch; align-items: end; justify-content: flex-start; flex-wrap: wrap; column-gap: 8px; }

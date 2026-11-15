@@ -193,3 +193,62 @@ html:not([data-theme="light"]) body .chat-view :is(.chat-top, .selection-header)
 @media (max-width: 767px) {
   html:not([data-theme="light"]) body .chat-view .header-container { margin-left: 14px; }
 }
+
+/* Consistent frosted surfaces for pane headers and content cards. */
+html body #loggedInScreen {
+  --panel-glass: rgba(30, 30, 34, .9);
+}
+html[data-theme="light"] body #loggedInScreen {
+  --panel-glass: rgba(255, 255, 255, .9);
+}
+html body #loggedInScreen :is(#paneDm .dm-top, .chat-list, .chat-view .header-container, .settings-pane .dm-top, .sg-head, .dsk-menu, .st-profile-row, .st-list, .sg-card, .sg-links, .own-card, .profile-info-card, .contacts-pane .dm-top, .edit-header) {
+  background: var(--panel-glass) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+@media (max-width: 767px) {
+  #loggedInScreen.chat-open .composer-surface .chat-input-row {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+  }
+  #loggedInScreen.chat-open .composer-surface .chat-pill-box {
+    height: auto;
+    min-height: 44px;
+    align-items: center;
+  }
+}
+
+@media (max-width: 767px) {
+  html body #loggedInScreen #paneDm .dm-top { margin-inline: 0; }
+  html body #loggedInScreen #paneDm .chat-list { margin-left: 0; margin-right: 0; }
+  html body #loggedInScreen .chat-view .header-container { margin-left: 0; margin-right: 0; }
+}
+
+@media (max-width: 767px) {
+  html body #loggedInScreen #paneDm { padding-inline: 0 !important; }
+  html body #loggedInScreen #paneDm .dm-top { width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; }
+  html body #loggedInScreen.chat-open .chat-input-wrapper { padding: 2px 0 2px !important; }
+  html body #loggedInScreen.chat-open .composer-surface { width: 100%; }
+}
+
+/* On the mobile chat list, match the solid panel background; keep chat wallpaper. */
+@media (max-width: 767px) {
+  html body .quietly-app:has(#loggedInScreen:not(.chat-open)[data-list-pane="dm"]) {
+    background: #1e1e22;
+  }
+  html[data-theme="light"] body .quietly-app:has(#loggedInScreen:not(.chat-open)[data-list-pane="dm"]) {
+    background: #fff;
+  }
+}
+
+@media (max-width: 767px) {
+  html body #loggedInScreen #paneDm .chat-list { margin-top: 4px !important; }
+}
+
+@media (max-width: 767px) {
+  html body .quietly-app { background-size: 100vw var(--wallpaper-height, 100vh); background-position: center top; }
+  html body #loggedInScreen #paneDm .chat-list { padding-top: 0 !important; margin-top: 2px !important; }
+  html body #loggedInScreen #paneDm .chat-list > li:first-child .chat-item { padding-top: 4px; }
+}

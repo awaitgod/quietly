@@ -92,7 +92,7 @@ watch(
       }
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 )
 
 
@@ -160,7 +160,7 @@ function toggleDesktopMenu() {
     </div>
 
     <!-- Rounded Floating Chats Card Container -->
-    <TransitionGroup tag="ul" name="chat-order" :move-class="animateReordering ? 'chat-order-move' : 'chat-order-initial'" class="chat-list">
+    <TransitionGroup tag="ul" name="chat-order" :class="{ 'chat-animate': animateReordering }" :move-class="animateReordering ? 'chat-order-move' : 'chat-order-initial'" class="chat-list">
       <li v-for="chat in combinedChatList" :key="chat.id">
         <button
           type="button"
@@ -177,7 +177,7 @@ function toggleDesktopMenu() {
             class="chat-item-avatar"
             :class="{ 'is-fav': chat.id === FAV_ID }"
           >
-            <img v-if="chat.avatar_url" :src="chat.avatar_url" alt="" />
+            <img v-if="chat.avatar_url" :src="chat.avatar_url" alt="" loading="lazy" decoding="async" />
             <span v-else-if="chat.id === FAV_ID" class="fav-icon-box">
               <SolarIcon name="bookmark-bold" :size="20" color="#ffffff" />
             </span>
@@ -252,6 +252,9 @@ function toggleDesktopMenu() {
 :global(html[data-theme="light"]) .dm-hamburger-btn:hover { background: #e2e2e8; }
 
 .chat-order-move { transition: transform 200ms ease; }
+.chat-animate .chat-order-enter-active, .chat-animate .chat-order-leave-active { transition: opacity 200ms ease, transform 200ms ease; }
+.chat-animate .chat-order-enter-from, .chat-animate .chat-order-leave-to { opacity: 0; transform: translateY(8px); }
+.chat-animate .chat-order-leave-active { position: absolute; width: 100%; pointer-events: none; }
 .chat-loading { list-style: none; }
 .chat-loading-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 .chat-loading-avatar { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--card); }
@@ -260,7 +263,7 @@ function toggleDesktopMenu() {
 .chat-loading-lines span:first-child { width: 42%; }
 .chat-loading-lines span:last-child { width: 72%; }
 :global(html[data-theme="light"]) .chat-loading-avatar, :global(html[data-theme="light"]) .chat-loading-lines span { background: #e9eaf0; }
-@media (prefers-reduced-motion: reduce) { .chat-order-move { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .chat-order-move, .chat-animate .chat-order-enter-active, .chat-animate .chat-order-leave-active { transition: none; } }
 .chat-list-pane {
   display: flex;
   flex-direction: column;
@@ -532,5 +535,13 @@ function toggleDesktopMenu() {
   color: #75757c;
   text-align: center;
   line-height: 1.6;
+}
+</style>
+
+<style scoped>
+@media (max-width: 767px) {
+  .chat-list > li { content-visibility: auto; contain-intrinsic-size: auto 68px; }
+  .chat-order-move, .chat-animate .chat-order-enter-active, .chat-animate .chat-order-leave-active { transition: none; }
+  .chat-list { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 }
 </style>

@@ -4,6 +4,7 @@ import { supabase, tablesApi, rpcApi, realtimeApi } from '../services/supabase';
 import { tauriSaveMessage, tauriNotify } from '../services/tauriIpc';
 import type { Group, GroupMember, GroupMessage, Message, UserProfile } from '../types';
 import { useAuthStore } from './auth';
+import { readChatListCache, writeChatListCache } from '../services/chatListCache';
 export const useGroupsStore = defineStore('groups', () => {
     const authStore = useAuthStore();
     const groups = ref<Group[]>([]);
@@ -43,6 +44,20 @@ export const useGroupsStore = defineStore('groups', () => {
             groups.value = list.map(group => ({ ...group, last_message: group.last_message || previous.get(String(group.id)) || null }));
             groupsLoadFailed.value = false;
             setupGroupListRealtime();
+            await Promise.all(list.map(async group => {
+                const result = await tablesApi.groupMessages.loadRecentForChatsList([String(group.id)], 1);
+                if (result.error) {
+                    console.error('[Groups] load last message:', result.error);
+                    return;
+                }
+                if (authStore.user?.id !== myId) return;
+                const current = groups.value.find(item => String(item.id) === String(group.id));
+                if (!current) return;
+                const latest = result.data?.[0] as GroupMessage | undefined;
+                const currentTime = current.last_message?.created_at ? Date.parse(current.last_message.created_at) : 0;
+                if (!currentTime || (latest && Date.parse(latest.created_at) >= currentTime))
+                    current.last_message = latest || null;
+            }));
         }
         catch (err) {
             console.error('[Groups] loadUserGroups error:', err);
@@ -91,8 +106,18 @@ export const useGroupsStore = defineStore('groups', () => {
             groups.value = [];
             groupsLoaded.value = false;
             groupsLoadFailed.value = false;
+            if (id) {
+                const cached = readChatListCache<Group>(id, 'groups');
+                if (cached) { groups.value = cached.filter(group => group && group.id); groupsLoaded.value = true; }
+            }
         }
     }, { immediate: true, flush: 'sync' });
+    watch(groups, value => {
+        if (authStore.user?.id && groupsLoaded.value) writeChatListCache(authStore.user.id, 'groups', value);
+    }, { deep: true });
+    watch(groupsLoaded, loaded => {
+        if (loaded && authStore.user?.id && !groupsLoadFailed.value) writeChatListCache(authStore.user.id, 'groups', groups.value);
+    });
     watch(groupMembers, value => {
         if (activeGroup.value)
             memberCache.set(String(activeGroup.value.id), value.slice());
